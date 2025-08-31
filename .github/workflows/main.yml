@@ -43,13 +43,6 @@ jobs:
         run: |
           rsync -a --delete /home/dev/project/backend/Build_dir/ /home/dev/project/backend/Prod_dir/
 
-      # Ensure PM2 is installed
-      - name: Install PM2
-        run: |
-          if ! command -v pm2 &> /dev/null; then
-            sudo npm install -g pm2
-          fi
-
       # Restart backend with PM2
       - name: Restart backend service
         working-directory: /home/dev/project/backend/Prod_dir
