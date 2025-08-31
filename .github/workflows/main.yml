@@ -47,4 +47,5 @@ jobs:
       - name: Run backend
         working-directory: /home/dev/project/backend/Prod_dir
         run: |
-          npm run dev
+          npm run dev -- --host 0.0.0.0
+ 
