@@ -47,4 +47,4 @@ jobs:
       - name: Run backend
         working-directory: /home/dev/project/backend/Prod_dir
         run: |
-          nohup npm start -- --host 0.0.0.0 &
+          npm run dev
