@@ -43,10 +43,10 @@ jobs:
         run: |
           rsync -a --delete /home/dev/project/backend/Build_dir/ /home/dev/project/backend/Prod_dir/
 
-      # Restart backend with PM2
+      # Restart backend with PM2 (using full path)
       - name: Restart backend service
         working-directory: /home/dev/project/backend/Prod_dir
         run: |
-          pm2 delete backend || true
-          pm2 start npm --name backend -- run start -- --host 0.0.0.0
-          pm2 save
+          /usr/local/bin/pm2 delete backend || true
+          /usr/local/bin/pm2 start npm --name backend -- run start -- --host 0.0.0.0
+          /usr/local/bin/pm2 save
