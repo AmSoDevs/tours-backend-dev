@@ -2,7 +2,7 @@ name: Backend CI/CD
 
 on:
   push:
-    branches: ["main"]   # adjust if you want another branch
+    branches: ["main"]
   pull_request:
 
 jobs:
@@ -14,18 +14,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Make sure directories exist
+      # Ensure build and prod directories exist
       - name: Ensure build and prod directories exist
         run: |
           mkdir -p /home/dev/project/backend/Build_dir
           mkdir -p /home/dev/project/backend/Prod_dir
 
-      # Clean Build_dir before copying new code
+      # Clean Build_dir
       - name: Clean Build_dir
         run: |
           rm -rf /home/dev/project/backend/Build_dir/*
 
-      # Copy repository contents from runner to Build_dir
+      # Copy repo files to Build_dir
       - name: Copy code to Build_dir
         run: |
           rsync -a --delete $GITHUB_WORKSPACE/ /home/dev/project/backend/Build_dir/
@@ -37,15 +37,23 @@ jobs:
           npm install
           npm run build
 
-      # Deploy only if build was successful
+      # Deploy only if build succeeds
       - name: Deploy to Prod_dir
         if: success()
         run: |
           rsync -a --delete /home/dev/project/backend/Build_dir/ /home/dev/project/backend/Prod_dir/
 
-      # Run backend on all interfaces (0.0.0.0)
-      - name: Run backend
+      # Ensure PM2 is installed
+      - name: Install PM2
+        run: |
+          if ! command -v pm2 &> /dev/null; then
+            sudo npm install -g pm2
+          fi
+
+      # Restart backend with PM2
+      - name: Restart backend service
         working-directory: /home/dev/project/backend/Prod_dir
         run: |
-          npm run dev -- --host 0.0.0.0
- 
+          pm2 delete backend || true
+          pm2 start npm --name backend -- run start -- --host 0.0.0.0
+          pm2 save
