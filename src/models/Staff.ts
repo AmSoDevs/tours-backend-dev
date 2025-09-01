@@ -20,6 +20,7 @@ export interface StaffDocument extends Document {
 	role: "staff";
 	passwordHash: string;
 	isDeleted: boolean;
+	isActive: boolean;
 	comparePassword(plain: string): Promise<boolean>;
 }
 
@@ -38,6 +39,7 @@ const StaffSchema = new Schema<StaffDocument>(
 		staffId: { type: String, required: true, unique: true, index: true },
 		role: { type: String, enum: ["staff"], default: "staff" },
 		passwordHash: { type: String, required: true },
+		isActive: { type: Boolean, default: true},
 		isDeleted: { type: Boolean, default: false, index: true },
 	},
 	{ timestamps: true }
