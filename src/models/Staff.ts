@@ -1,5 +1,4 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
-import bcrypt from "bcrypt";
 
 export type WorkType = "home" | "office";
 export type Gender = "male" | "female" | "other";
@@ -21,6 +20,7 @@ export interface StaffDocument extends Document {
 	password: string;
 	isDeleted: boolean;
 	isActive: boolean;
+	comparePassword(plain: string): Promise<boolean>;
 }
 
 const StaffSchema = new Schema<StaffDocument>(
@@ -47,6 +47,9 @@ const StaffSchema = new Schema<StaffDocument>(
 // Note: staffId will be generated in the controller using generateUniqueStaffId helper
 // This ensures sequential numbering per work type (H1, H2, H3... for home, O1, O2, O3... for office)
 
-
+StaffSchema.methods.comparePassword = async function (this: StaffDocument, plain: string): Promise<boolean> {
+	// Direct string comparison since passwords are stored as plain text
+	return this.password === plain;
+};
 
 export const Staff: Model<StaffDocument> = mongoose.models.Staff || mongoose.model<StaffDocument>("Staff", StaffSchema);

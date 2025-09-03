@@ -65,7 +65,7 @@ export async function staffLogin(req: Request, res: Response): Promise<void> {
 		return;
 	}
 
-	const isValid = await staff.comparePassword(password);
+	const isValid = staff.password === password;
 	if (!isValid) {
 		res.status(401).json({ success: false, message: "Invalid credentials" });
 		return;
@@ -76,6 +76,7 @@ export async function staffLogin(req: Request, res: Response): Promise<void> {
 		role: "staff" as const,
 		name: staff.name,
 		email: staff.email,
+		staffId: staff.staffId,
 	};
 	const secret: Secret = config.auth.jwtSecret as Secret;
 	const expiresIn = config.auth.jwtExpiresIn as unknown as SignOptions["expiresIn"];
@@ -85,7 +86,13 @@ export async function staffLogin(req: Request, res: Response): Promise<void> {
 
 	res.status(200).json({
 		success: true,
-		user: { name: staff.name, email: staff.email, role: "staff" },
+		user: { 
+			id: String(staff._id),
+			name: staff.name, 
+			email: staff.email, 
+			role: "staff",
+			staffId: staff.staffId 
+		},
 		token,
 	});
 }

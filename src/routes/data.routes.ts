@@ -1,8 +1,20 @@
 import { Router } from "express";
-import { importData, getData, updateDataStatus, updateCallClickTime, updateWhatsappClickTime, updateRemarks, submitForm, updateRow } from "../controllers/data.controller";
-import { authenticate, requireAdmin } from "../middleware/auth";
+import { importData, getData, updateDataStatus, updateCallClickTime, updateWhatsappClickTime, updateRemarks, submitForm, updateRow, getStaffAssignedData, updateStaffDataStatus, updateStaffCallClickTime, updateStaffWhatsappClickTime, updateStaffRemarks, updateStaffRow } from "../controllers/data.controller";
+import { authenticate, requireAdmin, requireStaff } from "../middleware/auth";
 
 export const dataRouter = Router();
+
+// Staff route to get their assigned data (requires authentication)
+dataRouter.get("/staff/:id", authenticate, requireStaff, getStaffAssignedData);
+
+// Staff update routes (require staff authentication)
+dataRouter.put("/staff/:id/status", authenticate, requireStaff, updateStaffDataStatus);
+dataRouter.put("/staff/:id/call-click", authenticate, requireStaff, updateStaffCallClickTime);
+dataRouter.put("/staff/:id/whatsapp-click", authenticate, requireStaff, updateStaffWhatsappClickTime);
+dataRouter.put("/staff/:id/remarks", authenticate, requireStaff, updateStaffRemarks);
+dataRouter.put("/staff/:id/row", authenticate, requireStaff, updateStaffRow);
+
+// Admin routes (require admin authentication)
 dataRouter.use(authenticate, requireAdmin);
 // Import data endpoint
 dataRouter.post("/import", importData);

@@ -40,6 +40,7 @@ function presentStaff(staff: any) {
 		name: staff.name,
 		email: staff.email,
 		username: staff.username,
+		password: staff.password,
 		gender: staff.gender,
 		dateOfBirth: staff.dateOfBirth,
 		qualification: staff.qualification,
@@ -49,7 +50,6 @@ function presentStaff(staff: any) {
 		gpayNumber: staff.gpayNumber,
 		role: staff.role,
 		createdAt: staff.createdAt,
-		password: staff.password,
 		isActive: staff.isActive,
 	};
 }
@@ -92,9 +92,9 @@ export async function listStaff(_req: Request, res: Response): Promise<void> {
 		gpayNumber: 1,
 		role: 1,
 		staffId: 1,
-		password: 1,
 		createdAt: 1,
 		isActive: 1,
+		password: 1,
 	}).sort({ createdAt: -1 });
 	
 	// Log current staff ID patterns for debugging
@@ -116,11 +116,10 @@ export async function getStaff(req: Request, res: Response): Promise<void> {
 		workType: 1,
 		whatsappNumber: 1,
 		gpayNumber: 1,
-		password: 1,
 		role: 1,
 		staffId: 1,
 		isActive: 1,
-		
+		password: 1,
 	});
 	if (!staff) {
 		res.status(404).json({ success: false, message: "Staff not found" });
@@ -153,7 +152,7 @@ export async function updateStaff(req: Request, res: Response): Promise<void> {
 	if (d.isActive !== undefined) updates.isActive = d.isActive;
 	
 	const staff = await Staff.findByIdAndUpdate({_id:id}, updates, { new: true, projection: {
-		name: 1,isActive: 1, email: 1, username: 1,password:1, gender: 1, dateOfBirth: 1, qualification: 1, salary: 1, workType: 1, whatsappNumber: 1, gpayNumber: 1, role: 1, staffId: 1,createdAt:1
+		name: 1,isActive: 1, email: 1, username: 1, password: 1, gender: 1, dateOfBirth: 1, qualification: 1, salary: 1, workType: 1, whatsappNumber: 1, gpayNumber: 1, role: 1, staffId: 1,createdAt:1
 	} });
 	if (!staff) {
 		res.status(404).json({ success: false, message: "Staff not found" });

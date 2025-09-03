@@ -7,6 +7,7 @@ export interface AuthUser extends JwtPayload {
 	role: "admin" | "staff";
 	name: string;
 	email: string;
+	staffId?: string; // Added for staff users
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -33,6 +34,14 @@ export function authenticate(req: AuthenticatedRequest, res: Response, next: Nex
 export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
 	if (!req.user || req.user.role !== "admin") {
 		res.status(403).json({ success: false, message: "Admin privileges required" });
+		return;
+	}
+	next();
+}
+
+export function requireStaff(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+	if (!req.user || req.user.role !== "staff") {
+		res.status(403).json({ success: false, message: "Staff privileges required" });
 		return;
 	}
 	next();
