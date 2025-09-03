@@ -47,6 +47,9 @@ export interface DataDocument extends Document {
   vSampleSend?: string;
   processing?: string;
   visaDate?: string;
+  step?: number;
+  status?: string;
+  profilePhoto?: string;
 }
 
 const DataSchema = new Schema<DataDocument>(
@@ -100,6 +103,9 @@ const DataSchema = new Schema<DataDocument>(
     vSampleSend: { type: String },
     processing: { type: String },
     visaDate: { type: String },
+    step: { type: Number },
+    status: { type: String },
+    profilePhoto: { type: String },
   },
   { timestamps: true }
 );

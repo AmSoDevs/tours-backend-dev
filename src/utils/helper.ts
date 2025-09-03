@@ -1,57 +1,119 @@
 import { Data } from "../models/Data";
+import { Staff } from "../models/Staff";
 
   
    export const generateUniqueSlNo = async (): Promise<string> => {
-    let attempts = 0;
-    const maxAttempts = 15;
-    
-    while (attempts < maxAttempts) {
+  try {
+    const highestRecord = await Data.findOne(
+      { 
+        slNo: { $regex: /^\d{6}$/ } 
+      },
+      {},
+      { sort: { slNo: -1 } } 
+    );
 
-      const timestamp = Date.now();
-      const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const counter = attempts.toString().padStart(2, '0');
-      const candidateSlNo = `REG${timestamp}${randomSuffix}${counter}`;
-      
- 
-      const existingSlNo = await Data.findOne({ slNo: candidateSlNo });
-      if (!existingSlNo) {
-        return candidateSlNo;
+    let nextNumber = 1;
+    
+    if (highestRecord && highestRecord.slNo) {
+      const currentNumber = parseInt(highestRecord.slNo, 10);
+      if (!isNaN(currentNumber)) {
+        nextNumber = currentNumber + 1;
       }
-      
-      attempts++;
-      await new Promise(resolve => setTimeout(resolve, 1));
+    }
+
+    const slNo = nextNumber.toString().padStart(6, '0');
+    
+    const existingRecord = await Data.findOne({ slNo });
+    if (existingRecord) {
+      return (nextNumber + 1).toString().padStart(6, '0');
     }
     
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-    const fallbackSlNo = `REG${dateStr}${timeStr}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
-    return fallbackSlNo;
-  };
+    return slNo;
+  } catch (error) {
+    console.error('Error generating slNo:', error);
+    const timestamp = Date.now().toString().slice(-6);
+    return timestamp;
+  }
+};
 
 
   export const generateUniqueProfileId = async (): Promise<string> => {
+  try {
     let attempts = 0;
-    const maxAttempts = 15;
+    const maxAttempts = 50; 
     
     while (attempts < maxAttempts) {
-      const timestamp = Date.now();
-      const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const counter = attempts.toString().padStart(2, '0');
-      const candidateProfileId = `PRO${timestamp}${randomSuffix}${counter}`;
+      const randomNumber = Math.floor(Math.random() * 900000) + 100000;
+      const profileId = randomNumber.toString();
       
-      const existingProfileId = await Data.findOne({ profileId: candidateProfileId });
-      if (!existingProfileId) {
-        return candidateProfileId;
+      const existingRecord = await Data.findOne({ profileId });
+      if (!existingRecord) {
+        return profileId;
       }
       
       attempts++;
-      await new Promise(resolve => setTimeout(resolve, 1));
     }
     
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-    const fallbackProfileId = `PRO${dateStr}${timeStr}${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}${Math.random().toString(36).substring(2, 4).toUpperCase()}`;
-    return fallbackProfileId;
-  };
+
+    const timestamp = Date.now().toString().slice(-6);
+    return timestamp;
+  } catch (error) {
+    console.error('Error generating profileId:', error);
+    const timestamp = Date.now().toString().slice(-6);
+    return timestamp;
+  }
+};
+
+
+export const generateUniqueStaffId = async (workType: string): Promise<string> => {
+  try {
+    const prefix = workType.charAt(0).toUpperCase();
+    
+    const highestRecord = await Staff.findOne(
+      { 
+        staffId: { $regex: new RegExp(`^${prefix}\\d+$`) }, 
+        isDeleted: false
+      },
+      {},
+      { sort: { staffId: -1 } }
+    );
+
+    let nextNumber = 1; 
+    
+    if (highestRecord && highestRecord.staffId) {
+      const numberPart = highestRecord.staffId.replace(/^[A-Z]/, '');
+      const currentNumber = parseInt(numberPart, 10);
+      if (!isNaN(currentNumber)) {
+        nextNumber = currentNumber + 1;
+      }
+    }
+
+    return `${prefix}${nextNumber}`;
+  } catch (error) {
+    console.error('Error generating staffId:', error);
+    const prefix = workType.charAt(0).toUpperCase();
+    const timestamp = Date.now().toString().slice(-4);
+    return `${prefix}${timestamp}`;
+  }
+};
+
+export const checkExistingStaffIds = async (): Promise<void> => {
+  try {
+    const homeStaff = await Staff.find({ 
+      workType: 'home', 
+      isDeleted: false 
+    }).select('staffId name').sort({ staffId: 1 });
+    
+    const officeStaff = await Staff.find({ 
+      workType: 'office', 
+      isDeleted: false 
+    }).select('staffId name').sort({ staffId: 1 });
+    
+    console.log('=== Existing Staff ID Patterns ===');
+    console.log('Home Staff:', homeStaff.map(s => `${s.staffId} (${s.name})`));
+    console.log('Office Staff:', officeStaff.map(s => `${s.staffId} (${s.name})`));
+    console.log('==================================');
+  } catch (error) {
+    console.error('Error checking existing staff IDs:', error);
+  }
+};

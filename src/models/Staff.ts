@@ -18,10 +18,9 @@ export interface StaffDocument extends Document {
 	gpayNumber: string;
 	staffId: string;
 	role: "staff";
-	passwordHash: string;
+	password: string;
 	isDeleted: boolean;
 	isActive: boolean;
-	comparePassword(plain: string): Promise<boolean>;
 }
 
 const StaffSchema = new Schema<StaffDocument>(
@@ -38,29 +37,16 @@ const StaffSchema = new Schema<StaffDocument>(
 		gpayNumber: { type: String, required: true },
 		staffId: { type: String, required: true, unique: true, index: true },
 		role: { type: String, enum: ["staff"], default: "staff" },
-		passwordHash: { type: String, required: true },
+		password: { type: String, required: true },
 		isActive: { type: Boolean, default: true},
 		isDeleted: { type: Boolean, default: false, index: true },
 	},
 	{ timestamps: true }
 );
 
-// Generate staffId encoding work type: H-YYYYMMDD-XXXX or O-YYYYMMDD-XXXX
-StaffSchema.pre("validate", function (next) {
-	if (!this.staffId && this.workType) {
-		const prefix = this.workType === "home" ? "H" : "O";
-		const now = new Date();
-		const y = now.getFullYear().toString();
-		const m = String(now.getMonth() + 1).padStart(2, "0");
-		const d = String(now.getDate()).padStart(2, "0");
-		const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-		this.staffId = `${prefix}-${y}${m}${d}-${rand}`;
-	}
-	next();
-});
+// Note: staffId will be generated in the controller using generateUniqueStaffId helper
+// This ensures sequential numbering per work type (H1, H2, H3... for home, O1, O2, O3... for office)
 
-StaffSchema.methods.comparePassword = async function (this: StaffDocument, plain: string): Promise<boolean> {
-	return bcrypt.compare(plain, this.passwordHash);
-};
+
 
 export const Staff: Model<StaffDocument> = mongoose.models.Staff || mongoose.model<StaffDocument>("Staff", StaffSchema);

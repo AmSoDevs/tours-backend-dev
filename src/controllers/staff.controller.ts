@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import { Staff } from "../models/Staff";
+import { generateUniqueStaffId, checkExistingStaffIds } from "../utils/helper";
 
 const createSchema = z.object({
 	name: z.string().min(1),
@@ -15,10 +16,12 @@ const createSchema = z.object({
 	whatsappNumber: z.string().min(6),
 	gpayNumber: z.string().min(6),
 	password: z.string().min(6),
+	isActive: z.boolean().default(true),
 });
 
 const updateSchema = z.object({
 	name: z.string().min(1).optional(),
+	isActive: z.boolean().optional(),
 	username: z.string().min(3).optional(),
 	gender: z.enum(["male", "female", "other"]).optional(),
 	dateOfBirth: z.string().transform((v) => new Date(v)).optional(),
@@ -45,11 +48,16 @@ function presentStaff(staff: any) {
 		whatsappNumber: staff.whatsappNumber,
 		gpayNumber: staff.gpayNumber,
 		role: staff.role,
+		createdAt: staff.createdAt,
+		password: staff.password,
+		isActive: staff.isActive,
 	};
 }
 
 export async function createStaff(req: Request, res: Response): Promise<void> {
 	const parsed = createSchema.safeParse(req.body);
+	console.log(req.body,"req.body");
+	
 	if (!parsed.success) {
 		res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });
 		return;
@@ -60,8 +68,13 @@ export async function createStaff(req: Request, res: Response): Promise<void> {
 		res.status(409).json({ success: false, message: "Email or username already in use" });
 		return;
 	}
-	const passwordHash = await bcrypt.hash(password, 10);
-	const staff = await Staff.create({ ...data, passwordHash });
+	
+	// Generate unique staffId based on work type
+	const staffId = await generateUniqueStaffId(data.workType);
+	console.log(`Generated staffId: ${staffId} for ${data.workType} staff member (${data.name})`);
+	console.log(`Pattern: ${data.workType === 'home' ? 'H1, H2, H3...' : 'O1, O2, O3...'} for ${data.workType} staff`);
+	
+	const staff = await Staff.create({ ...data, staffId, password, isActive: data.isActive ?? true });
 	res.status(201).json({ success: true, staff: presentStaff(staff) });
 }
 
@@ -79,7 +92,14 @@ export async function listStaff(_req: Request, res: Response): Promise<void> {
 		gpayNumber: 1,
 		role: 1,
 		staffId: 1,
+		password: 1,
+		createdAt: 1,
+		isActive: 1,
 	}).sort({ createdAt: -1 });
+	
+	// Log current staff ID patterns for debugging
+	await checkExistingStaffIds();
+	
 	res.json({ success: true, staff: staff.map(presentStaff) });
 }
 
@@ -96,8 +116,11 @@ export async function getStaff(req: Request, res: Response): Promise<void> {
 		workType: 1,
 		whatsappNumber: 1,
 		gpayNumber: 1,
+		password: 1,
 		role: 1,
 		staffId: 1,
+		isActive: 1,
+		
 	});
 	if (!staff) {
 		res.status(404).json({ success: false, message: "Staff not found" });
@@ -108,25 +131,29 @@ export async function getStaff(req: Request, res: Response): Promise<void> {
 
 export async function updateStaff(req: Request, res: Response): Promise<void> {
 	const { id } = req.params;
+	
 	const parsed = updateSchema.safeParse(req.body);
 	if (!parsed.success) {
 		res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });
 		return;
 	}
+	
 	const updates: Record<string, unknown> = {};
 	const d = parsed.data as any;
-	if (d.name) updates.name = d.name;
-	if (d.username) updates.username = d.username;
-	if (d.gender) updates.gender = d.gender;
-	if (d.dateOfBirth) updates.dateOfBirth = d.dateOfBirth;
-	if (d.qualification) updates.qualification = d.qualification;
+	if (d.name !== undefined) updates.name = d.name;
+	if (d.username !== undefined) updates.username = d.username;
+	if (d.gender !== undefined) updates.gender = d.gender;
+	if (d.dateOfBirth !== undefined) updates.dateOfBirth = d.dateOfBirth;
+	if (d.qualification !== undefined) updates.qualification = d.qualification;
 	if (d.salary !== undefined) updates.salary = d.salary;
-	if (d.workType) updates.workType = d.workType;
-	if (d.whatsappNumber) updates.whatsappNumber = d.whatsappNumber;
-	if (d.gpayNumber) updates.gpayNumber = d.gpayNumber;
-	if (d.password) updates.passwordHash = await bcrypt.hash(d.password, 10);
-	const staff = await Staff.findByIdAndUpdate(id, updates, { new: true, projection: {
-		name: 1, email: 1, username: 1, gender: 1, dateOfBirth: 1, qualification: 1, salary: 1, workType: 1, whatsappNumber: 1, gpayNumber: 1, role: 1, staffId: 1,
+	if (d.workType !== undefined) updates.workType = d.workType;
+	if (d.whatsappNumber !== undefined) updates.whatsappNumber = d.whatsappNumber;
+	if (d.gpayNumber !== undefined) updates.gpayNumber = d.gpayNumber;
+	if (d.password !== undefined) updates.password = d.password;
+	if (d.isActive !== undefined) updates.isActive = d.isActive;
+	
+	const staff = await Staff.findByIdAndUpdate({_id:id}, updates, { new: true, projection: {
+		name: 1,isActive: 1, email: 1, username: 1,password:1, gender: 1, dateOfBirth: 1, qualification: 1, salary: 1, workType: 1, whatsappNumber: 1, gpayNumber: 1, role: 1, staffId: 1,createdAt:1
 	} });
 	if (!staff) {
 		res.status(404).json({ success: false, message: "Staff not found" });

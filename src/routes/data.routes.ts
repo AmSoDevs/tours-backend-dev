@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { importData, getData, updateDataStatus, updateCallClickTime, updateWhatsappClickTime, updateRemarks, submitForm } from "../controllers/data.controller";
+import { importData, getData, updateDataStatus, updateCallClickTime, updateWhatsappClickTime, updateRemarks, submitForm, updateRow } from "../controllers/data.controller";
 import { authenticate, requireAdmin } from "../middleware/auth";
 
 export const dataRouter = Router();
@@ -21,5 +21,8 @@ dataRouter.put("/whatsapp-click", updateWhatsappClickTime);
 
 // Update remarks endpoint
 dataRouter.put("/remarks", updateRemarks);
+
+// Update individual row endpoint
+dataRouter.put("/row", updateRow);
 
 
