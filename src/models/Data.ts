@@ -55,7 +55,7 @@ const DataSchema = new Schema<DataDocument>(
   {
     slNo: { type: String, required: true },
     profileId: { type: String},
-    dataType: { type: String, required: true },
+    dataType: { type: String},
     data: { type: String },
     verified: { type: String },
     mobile: { type: String, required: true, index: true },

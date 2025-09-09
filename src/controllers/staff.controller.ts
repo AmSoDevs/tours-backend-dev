@@ -56,7 +56,7 @@ function presentStaff(staff: any) {
 
 export async function createStaff(req: Request, res: Response): Promise<void> {
 	const parsed = createSchema.safeParse(req.body);
-	console.log(req.body,"req.body");
+	
 	
 	if (!parsed.success) {
 		res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });

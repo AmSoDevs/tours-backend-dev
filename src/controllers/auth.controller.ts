@@ -59,7 +59,7 @@ export async function staffLogin(req: Request, res: Response): Promise<void> {
 
 	const { email, password } = parsed.data;
 
-	const staff = await Staff.findOne({ email });
+	const staff = await Staff.findOne({ email, isDeleted: false ,isActive:true});
 	if (!staff) {
 		res.status(401).json({ success: false, message: "Invalid credentials" });
 		return;

@@ -9,7 +9,6 @@ export const importData = async (req: Request, res: Response) => {
 
     const { dataType, data } = req.body;
 
-    // Check if there are existing records with non-numeric slNo that might conflict
     const existingNonNumericSlNo = await Data.findOne({ 
       slNo: { $not: /^\d{6}$/ } 
     });
@@ -64,7 +63,12 @@ export const importData = async (req: Request, res: Response) => {
            
            
            const existingRecord = await Data.findOne({
-             mobile: record.mobile,
+             $or: [
+               { mobile: record.mobile },
+               { refferenceNumber: record.mobile },
+               { mobile: record.refferenceNumber },
+               { refferenceNumber: record.refferenceNumber }
+             ]
            });
 
            if (existingRecord) {
@@ -107,6 +111,9 @@ export const importData = async (req: Request, res: Response) => {
          }
        }
      }
+
+     console.log(results,"results");
+     
 
     return res.status(200).json({
       success: true,
@@ -456,7 +463,6 @@ export const submitForm = async (req: Request, res: Response) => {
       contactPersonName,
     } = req.body;
 
-    // Validate required fields
     if (!name || !mobile) {
       return res.status(400).json({
         success: false,
@@ -464,8 +470,12 @@ export const submitForm = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if mobile number already exists
-    const existingRecord = await Data.findOne({ mobile });
+    const existingRecord = await Data.findOne({
+      $or: [
+        { mobile: mobile },
+        { refferenceNumber: mobile }
+      ]
+    });
     if (existingRecord) {
       return res.status(400).json({
         success: false,
@@ -473,7 +483,6 @@ export const submitForm = async (req: Request, res: Response) => {
       });
     }
 
-    // Get a staff member to assign (round-robin or first available)
     const staffMember = await Staff.findOne({
       isDeleted: false,
       isActive: true,
@@ -571,8 +580,12 @@ export const updateForm = async (req: Request, res: Response) => {
       });
     }
 
-    // Find existing record by mobile number
-    const existingRecord = await Data.findOne({ mobile });
+    const existingRecord = await Data.findOne({
+      $or: [
+        { mobile: mobile },
+        { refferenceNumber: mobile }
+      ]
+    });
     if (!existingRecord) {
       return res.status(404).json({
         success: false,
@@ -638,7 +651,6 @@ export const updateRow = async (req: Request, res: Response) => {
       dataType,
       refferenceNumber,
       refferenceName,
-      // Register specific fields
       regPayment,
       visaPay,
       contactPersonName,
@@ -663,7 +675,6 @@ export const updateRow = async (req: Request, res: Response) => {
       processing,
       visaDate,
     } = req.body;
-console.log(req.body,"req body");
 
     if (!id) {
       return res.status(400).json({
@@ -672,7 +683,7 @@ console.log(req.body,"req body");
       });
     }
 
-    // Find the record by ID
+   
     const existingRecord = await Data.findById(id);
     if (!existingRecord) {
       return res.status(404).json({
@@ -681,7 +692,56 @@ console.log(req.body,"req body");
       });
     }
 
-    // Prepare update object with only provided fields
+    if (mobile !== undefined || refferenceNumber !== undefined) {
+      if (mobile !== undefined && refferenceNumber !== undefined && mobile === refferenceNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "Mobile number and reference number cannot be the same.",
+        });
+      }
+
+      if (mobile !== undefined && existingRecord.refferenceNumber && mobile === existingRecord.refferenceNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "Mobile number cannot be the same as the existing reference number in this record.",
+        });
+      }
+
+      if (refferenceNumber !== undefined && existingRecord.mobile && refferenceNumber === existingRecord.mobile) {
+        return res.status(400).json({
+          success: false,
+          message: "Reference number cannot be the same as the existing mobile number in this record.",
+        });
+      }
+
+      const duplicateCheckQuery: any = {
+        _id: { $ne: id }, // Exclude the current record being updated
+        $or: []
+      };
+
+      if (mobile !== undefined) {
+        duplicateCheckQuery.$or.push(
+          { mobile: mobile },
+          { refferenceNumber: mobile }
+        );
+      }
+
+      if (refferenceNumber !== undefined) {
+        duplicateCheckQuery.$or.push(
+          { mobile: refferenceNumber },
+          { refferenceNumber: refferenceNumber }
+        );
+      }
+
+      const duplicateRecord = await Data.findOne(duplicateCheckQuery);
+      if (duplicateRecord) {
+        return res.status(400).json({
+          success: false,
+          message: "Mobile number or reference number already exists in another record.",
+        });
+      }
+    }
+
     const updateFields: any = {};
     if (mobile !== undefined) updateFields.mobile = mobile;
     if (name !== undefined) updateFields.name = name;
@@ -693,7 +753,6 @@ console.log(req.body,"req body");
     if (refferenceNumber !== undefined) updateFields.refferenceNumber = refferenceNumber;
     if (refferenceName !== undefined) updateFields.refferenceName = refferenceName;
     
-    // Register specific fields
     if (regPayment !== undefined) updateFields.regPayment = regPayment;
     if (visaPay !== undefined) updateFields.visaPay = visaPay;
     if (contactPersonName !== undefined) updateFields.contactPersonName = contactPersonName;
@@ -765,6 +824,8 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     }
     if (status && status !== "all") {
       query.status = { $regex: status, $options: "i" };
+    } else if (status === "all"||!status) {
+      query.status = { $in: [null, "", undefined] };
     }
     if (dataFilter && dataFilter !== "all") {
       query.data = { $regex: dataFilter, $options: "i" };
@@ -1123,7 +1184,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         message: "Record ID is required",
       });
     }
-
+  
     // Verify that the record belongs to the staff member
     const record = await Data.findOne({
       _id: id,
@@ -1136,6 +1197,57 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         success: false,
         message: "Record not found or not assigned to you.",
       });
+    }
+
+    
+    if (mobile !== undefined || refferenceNumber !== undefined) {
+      if (mobile !== undefined && refferenceNumber !== undefined && mobile === refferenceNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "Mobile number and reference number cannot be the same.",
+        });
+      }
+
+      if (mobile !== undefined && record.refferenceNumber && mobile === record.refferenceNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "Mobile number cannot be the same as the existing reference number in this record.",
+        });
+      }
+
+      if (refferenceNumber !== undefined && record.mobile && refferenceNumber === record.mobile) {
+        return res.status(400).json({
+          success: false,
+          message: "Reference number cannot be the same as the existing mobile number in this record.",
+        });
+      }
+
+      const duplicateCheckQuery: any = {
+        _id: { $ne: id },
+        $or: []
+      };
+
+      if (mobile !== undefined) {
+        duplicateCheckQuery.$or.push(
+          { mobile: mobile },
+          { refferenceNumber: mobile }
+        );
+      }
+
+      if (refferenceNumber !== undefined) {
+        duplicateCheckQuery.$or.push(
+          { mobile: refferenceNumber },
+          { refferenceNumber: refferenceNumber }
+        );
+      }
+
+      const duplicateRecord = await Data.findOne(duplicateCheckQuery);
+      if (duplicateRecord) {
+        return res.status(400).json({
+          success: false,
+          message: "Mobile number or reference number already exists in another record.",
+        });
+      }
     }
 
     // Prepare update object with only provided fields

@@ -33,9 +33,9 @@ export async function createStatus(req: Request, res: Response): Promise<void> {
 	}
 	const payload = parsed.data as any;
 	// Prevent duplicates by name (case-insensitive) among non-deleted
-	const existing = await Status.findOne({ name: { $regex: `^${payload.name}$`, $options: "i" }, isDeleted: false });
+	const existing = await Status.findOne({ name: { $regex: `^${payload.name}$`, $options: "i" },dataType:payload?.dataType, isDeleted: false });
 	if (existing) {
-		res.status(409).json({ success: false, message: "Status name already exists" });
+		res.status(409).json({ success: false, message: "Status name already exists for this data type" });
 		return;
 	}
 	const status = await Status.create({ name: payload.name, dataType: payload.dataType, color: payload.color });
@@ -69,9 +69,9 @@ export async function updateStatus(req: Request, res: Response): Promise<void> {
 	const updates: Record<string, unknown> = {};
 	const d = parsed.data as any;
 	if (d.name !== undefined) {
-		const existing = await Status.findOne({ _id: { $ne: id }, name: { $regex: `^${d.name}$`, $options: "i" }, isDeleted: false });
+		const existing = await Status.findOne({ _id: { $ne: id }, name: { $regex: `^${d.name}$`, $options: "i" },dataType:d?.dataType, isDeleted: false });
 		if (existing) {
-			res.status(409).json({ success: false, message: "Status name already exists" });
+			res.status(409).json({ success: false, message: "Status name already exists for this data type" });
 			return;
 		}
 		updates.name = d.name;
