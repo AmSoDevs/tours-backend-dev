@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { Data } from "../models/Data";
 import { Staff } from "../models/Staff";
-import { generateUniqueProfileId, generateUniqueSlNo } from "../utils/helper";
+import { StaffAssignment } from "../models/StaffAssignment";
+import { generateUniqueProfileId, generateUniqueSlNo, resetStaffAssignmentIfNeeded } from "../utils/helper";
 
 export const importData = async (req: Request, res: Response) => {
   try {
@@ -24,7 +25,7 @@ export const importData = async (req: Request, res: Response) => {
       });
     }
 
-    // Get all active staff members
+    
     const staffMembers = await Staff.find({
       isDeleted: false,
       isActive: true,
@@ -36,6 +37,25 @@ export const importData = async (req: Request, res: Response) => {
         message: "No staff members available for data assignment.",
       });
     }
+
+    
+    let staffAssignment = await StaffAssignment.findOne();
+    if (!staffAssignment) {
+      staffAssignment = new StaffAssignment({
+        lastAssignedStaffIndex: -1,
+        totalAssignedRecords: 0,
+      });
+      await staffAssignment.save();
+    }
+
+    
+    if (staffAssignment.lastAssignedStaffIndex >= staffMembers.length) {
+      console.log(`Staff index ${staffAssignment.lastAssignedStaffIndex} is invalid for current staff array of length ${staffMembers.length}. Resetting to -1.`);
+      staffAssignment.lastAssignedStaffIndex = -1;
+    }
+
+    
+    console.log(`Current staff assignment state: lastIndex=${staffAssignment.lastAssignedStaffIndex}, totalRecords=${staffAssignment.totalAssignedRecords}, activeStaff=${staffMembers.length}`);
 
 
     const results = {
@@ -77,9 +97,12 @@ export const importData = async (req: Request, res: Response) => {
            }
 
            
-           const staffIndex =
-             (results.importedRecords + index) % staffMembers.length;
+       
+           const staffIndex = (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
            const assignedStaff = staffMembers[staffIndex]._id;
+           
+           staffAssignment.lastAssignedStaffIndex = staffIndex;
+           staffAssignment.totalAssignedRecords += 1;
 
         
            const slNo = await generateUniqueSlNo();
@@ -112,7 +135,9 @@ export const importData = async (req: Request, res: Response) => {
        }
      }
 
-     console.log(results,"results");
+    await staffAssignment.save();
+
+   
      
 
     return res.status(200).json({
@@ -146,7 +171,6 @@ export const getData = async (req: Request, res: Response) => {
 
     const query: any = { isDeleted: false };
 
-    // Apply filters
     if (dataType && dataType !== "all") {
       query.dataType = { $regex: dataType, $options: "i" };
     }
@@ -156,16 +180,13 @@ export const getData = async (req: Request, res: Response) => {
     }
 
     if (status && status !== "all") {
-      // General regex search for other statuses
       query.status = { $regex: status, $options: "i" };
     }
 
     if (dataFilter && dataFilter !== "all") {
-      // Enhanced regex patterns for common data types
       query.data = { $regex: dataFilter, $options: "i" };
     }
 
-    // General search across multiple fields
     if (search && search !== "") {
       const searchRegex = { $regex: search, $options: "i" };
       query.$or = [
@@ -179,7 +200,6 @@ export const getData = async (req: Request, res: Response) => {
       ];
     }
 
-    // Build sort object
     const sortObj: any = {};
     if (sortBy === "createdAt") {
       sortObj.createdAt = sortOrder === "desc" ? -1 : 1;
@@ -193,15 +213,14 @@ export const getData = async (req: Request, res: Response) => {
       sortObj.status = sortOrder === "desc" ? -1 : 1;
     }
 
-    console.log("Query being executed:", JSON.stringify(query, null, 2));
-    console.log("Sort object:", JSON.stringify(sortObj, null, 2));
+ 
     
     let data;
     let total;
     let pagination;
 
     if (limit) {
-      // With pagination
+     
       const skip = (Number(page) - 1) * Number(limit);
       data = await Data.find(query)
         .populate("assignedStaff", "name staffId")
@@ -217,7 +236,7 @@ export const getData = async (req: Request, res: Response) => {
         limit: Number(limit),
       };
     } else {
-      // Without pagination - get all records
+      
       data = await Data.find(query)
         .populate("assignedStaff", "name staffId")
         .sort(sortObj);
@@ -264,17 +283,17 @@ export const updateDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    // Prepare update object
+   
     const updateData: any = {
       status: status,
     };
 
-    // Add reminderDateAndTime if provided
+   
     if (reminderDateAndTime) {
       updateData.reminderDateAndTime = new Date(reminderDateAndTime);
     }
 
-    // Update multiple records
+   
     const updateResult = await Data.updateMany(
       {
         _id: { $in: ids },
@@ -1133,6 +1152,93 @@ export const updateStaffRemarks = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Internal server error while updating remarks",
+      error: error.message,
+    });
+  }
+};
+
+// Reset staff assignment rotation (useful when staff changes occur)
+export const resetStaffAssignment = async (req: Request, res: Response) => {
+  try {
+    const staffAssignment = await StaffAssignment.findOne();
+    
+    if (!staffAssignment) {
+      return res.status(404).json({
+        success: false,
+        message: "Staff assignment tracking not found.",
+      });
+    }
+
+    // Use the helper function to reset
+    await resetStaffAssignmentIfNeeded();
+
+    // Get updated assignment for response
+    const updatedAssignment = await StaffAssignment.findOne();
+
+    return res.status(200).json({
+      success: true,
+      message: "Staff assignment rotation has been reset. Next import will start from the first staff member.",
+      data: {
+        lastAssignedStaffIndex: updatedAssignment?.lastAssignedStaffIndex || -1,
+        totalAssignedRecords: updatedAssignment?.totalAssignedRecords || 0,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error resetting staff assignment:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while resetting staff assignment",
+      error: error.message,
+    });
+  }
+};
+
+// Get current staff assignment status
+export const getStaffAssignmentStatus = async (req: Request, res: Response) => {
+  try {
+    const staffMembers = await Staff.find({
+      isDeleted: false,
+      isActive: true,
+    }).select("_id name staffId");
+
+    const staffAssignment = await StaffAssignment.findOne();
+    
+    if (!staffAssignment) {
+      return res.status(200).json({
+        success: true,
+        message: "No staff assignment tracking found. Will be created on next import.",
+        data: {
+          staffMembers: staffMembers.length,
+          lastAssignedStaffIndex: -1,
+          totalAssignedRecords: 0,
+          nextStaffToReceive: staffMembers.length > 0 ? staffMembers[0].name : "No staff available",
+        },
+      });
+    }
+
+    const nextStaffIndex = (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
+    const nextStaff = staffMembers[nextStaffIndex];
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        staffMembers: staffMembers.length,
+        lastAssignedStaffIndex: staffAssignment.lastAssignedStaffIndex,
+        totalAssignedRecords: staffAssignment.totalAssignedRecords,
+        nextStaffToReceive: nextStaff ? nextStaff.name : "No staff available",
+        staffList: staffMembers.map((staff, index) => ({
+          index,
+          name: staff.name,
+          staffId: staff.staffId,
+          isNext: index === nextStaffIndex,
+        })),
+      },
+    });
+  } catch (error: any) {
+    console.error("Error getting staff assignment status:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while getting staff assignment status",
       error: error.message,
     });
   }

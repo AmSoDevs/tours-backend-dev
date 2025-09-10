@@ -1,8 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
-import bcrypt from "bcrypt";
 import { Staff } from "../models/Staff";
-import { generateUniqueStaffId, checkExistingStaffIds } from "../utils/helper";
+import { generateUniqueStaffId, checkExistingStaffIds, resetStaffAssignmentIfNeeded } from "../utils/helper";
 
 const createSchema = z.object({
 	name: z.string().min(1),
@@ -69,7 +68,6 @@ export async function createStaff(req: Request, res: Response): Promise<void> {
 		return;
 	}
 	
-	// Generate unique staffId based on work type
 	const staffId = await generateUniqueStaffId(data.workType);
 	console.log(`Generated staffId: ${staffId} for ${data.workType} staff member (${data.name})`);
 	console.log(`Pattern: ${data.workType === 'home' ? 'H1, H2, H3...' : 'O1, O2, O3...'} for ${data.workType} staff`);
@@ -97,7 +95,6 @@ export async function listStaff(_req: Request, res: Response): Promise<void> {
 		password: 1,
 	}).sort({ createdAt: -1 });
 	
-	// Log current staff ID patterns for debugging
 	await checkExistingStaffIds();
 	
 	res.json({ success: true, staff: staff.map(presentStaff) });
@@ -158,8 +155,14 @@ export async function updateStaff(req: Request, res: Response): Promise<void> {
 		res.status(404).json({ success: false, message: "Staff not found" });
 		return;
 	}
+	
+	if (d.isActive !== undefined) {
+		await resetStaffAssignmentIfNeeded();
+	}
+	
 	res.json({ success: true, staff: presentStaff(staff) });
 }
+
 
 export async function softDeleteStaff(req: Request, res: Response): Promise<void> {
 	const { id } = req.params;
@@ -168,6 +171,10 @@ export async function softDeleteStaff(req: Request, res: Response): Promise<void
 		res.status(404).json({ success: false, message: "Staff not found" });
 		return;
 	}
+	
+	
+	await resetStaffAssignmentIfNeeded();
+	
 	res.status(200).json({ success: true });
 }
 

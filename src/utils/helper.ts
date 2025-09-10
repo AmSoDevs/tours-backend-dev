@@ -1,5 +1,6 @@
 import { Data } from "../models/Data";
 import { Staff } from "../models/Staff";
+import { StaffAssignment } from "../models/StaffAssignment";
 
   
    export const generateUniqueSlNo = async (): Promise<string> => {
@@ -115,5 +116,19 @@ export const checkExistingStaffIds = async (): Promise<void> => {
     console.log('==================================');
   } catch (error) {
     console.error('Error checking existing staff IDs:', error);
+  }
+};
+
+
+export const resetStaffAssignmentIfNeeded = async (): Promise<void> => {
+  try {
+    const staffAssignment = await StaffAssignment.findOne();
+    if (staffAssignment) {
+      staffAssignment.lastAssignedStaffIndex = -1;
+      await staffAssignment.save();
+      console.log("Staff assignment rotation reset due to staff changes");
+    }
+  } catch (error) {
+    console.error("Error resetting staff assignment:", error);
   }
 };
