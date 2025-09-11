@@ -113,16 +113,7 @@ export const checkExistingStaffIds = async (): Promise<void> => {
       .select("staffId name")
       .sort({ staffId: 1 });
 
-    console.log("=== Existing Staff ID Patterns ===");
-    console.log(
-      "Home Staff:",
-      homeStaff.map((s) => `${s.staffId} (${s.name})`)
-    );
-    console.log(
-      "Office Staff:",
-      officeStaff.map((s) => `${s.staffId} (${s.name})`)
-    );
-    console.log("==================================");
+  
   } catch (error) {
     console.error("Error checking existing staff IDs:", error);
   }
@@ -134,7 +125,6 @@ export const resetStaffAssignmentIfNeeded = async (): Promise<void> => {
     if (staffAssignment) {
       staffAssignment.lastAssignedStaffIndex = -1;
       await staffAssignment.save();
-      console.log("Staff assignment rotation reset due to staff changes");
     }
   } catch (error) {
     console.error("Error resetting staff assignment:", error);
@@ -147,8 +137,13 @@ export const generateUniqueTrackingId = async (): Promise<string> => {
     const maxAttempts = 50;
 
     while (attempts < maxAttempts) {
-      const randomNumber = Math.floor(Math.random() * 900000) + 100000;
-      const trackingId = randomNumber.toString();
+      // Generate 10-character alphanumeric tracking ID (letters + digits)
+      const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let trackingId = '';
+      
+      for (let i = 0; i < 10; i++) {
+        trackingId += characters.charAt(Math.floor(Math.random() * characters.length));
+      }
 
       const existingRecord = await FormTracking.findOne({ trackingId });
       if (!existingRecord) {
@@ -158,11 +153,27 @@ export const generateUniqueTrackingId = async (): Promise<string> => {
       attempts++;
     }
 
+    // Fallback: use timestamp with alphanumeric characters
     const timestamp = Date.now().toString().slice(-6);
-    return timestamp;
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let fallbackId = '';
+    
+    for (let i = 0; i < 4; i++) {
+      fallbackId += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    
+    return fallbackId + timestamp;
   } catch (error) {
-    console.error("Error generating profileId:", error);
+    console.error("Error generating trackingId:", error);
+    // Fallback: use timestamp with alphanumeric characters
     const timestamp = Date.now().toString().slice(-6);
-    return timestamp;
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let fallbackId = '';
+    
+    for (let i = 0; i < 4; i++) {
+      fallbackId += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    
+    return fallbackId + timestamp;
   }
 };

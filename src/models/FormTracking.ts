@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from "mongoose";
 export interface IFormTracking extends Document {
   trackingId: string;
   formType: string;
-  staffId: mongoose.Types.ObjectId;
+  staffId?: mongoose.Types.ObjectId;
   dataId?: mongoose.Types.ObjectId;
   sharedAt: Date;
   submittedAt?: Date;
@@ -14,6 +14,7 @@ export interface IFormTracking extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
 
 const FormTrackingSchema = new Schema<IFormTracking>(
   {
@@ -30,7 +31,6 @@ const FormTrackingSchema = new Schema<IFormTracking>(
     staffId: {
       type: Schema.Types.ObjectId,
       ref: "Staff",
-      required: true,
     },
     dataId: {
       type: Schema.Types.ObjectId,

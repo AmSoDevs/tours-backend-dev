@@ -7,7 +7,7 @@ const staff_routes_1 = require("./staff.routes");
 const status_routes_1 = require("./status.routes");
 const data_routes_1 = require("./data.routes");
 const public_routes_1 = require("./public.routes");
-const formTracking_routes_1 = require("./formTracking.routes");
+const registration_routes_1 = require("./registration.routes");
 exports.apiRouter = (0, express_1.Router)();
 exports.apiRouter.get("/", (_req, res) => {
     res.json({ message: "CRM API v1" });
@@ -17,5 +17,5 @@ exports.apiRouter.use("/staff", staff_routes_1.staffRouter);
 exports.apiRouter.use("/status", status_routes_1.statusRouter);
 exports.apiRouter.use("/data", data_routes_1.dataRouter);
 exports.apiRouter.use("/public", public_routes_1.publicRouter);
-exports.apiRouter.use("/form-tracking", formTracking_routes_1.formTrackingRouter);
+exports.apiRouter.use("/registration", registration_routes_1.registrationRouter);
 //# sourceMappingURL=index.js.map

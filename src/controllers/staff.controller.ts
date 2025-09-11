@@ -69,8 +69,6 @@ export async function createStaff(req: Request, res: Response): Promise<void> {
 	}
 	
 	const staffId = await generateUniqueStaffId(data.workType);
-	console.log(`Generated staffId: ${staffId} for ${data.workType} staff member (${data.name})`);
-	console.log(`Pattern: ${data.workType === 'home' ? 'H1, H2, H3...' : 'O1, O2, O3...'} for ${data.workType} staff`);
 	
 	const staff = await Staff.create({ ...data, staffId, password, isActive: data.isActive ?? true });
 	res.status(201).json({ success: true, staff: presentStaff(staff) });

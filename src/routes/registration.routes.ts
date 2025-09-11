@@ -12,8 +12,7 @@ export const registrationRouter = Router();
 
 
 
-// Staff routes (require staff authentication)
-// registrationRouter.use(authenticate, requireStaff);
+
 registrationRouter.use(authenticate, requireAdmin);
 
 

@@ -11,7 +11,7 @@ import { FormTracking } from "../models/FormTracking";
 
 export const importData = async (req: Request, res: Response) => {
   try {
-    console.log("req.body:", req.body);
+    
 
     const { dataType, data } = req.body;
 
@@ -79,9 +79,7 @@ export const importData = async (req: Request, res: Response) => {
     }
 
     for (const batch of batches) {
-      console.log(
-        `Processing batch with ${batch.length} records sequentially...`
-      );
+     
 
       for (let index = 0; index < batch.length; index++) {
         const record = batch[index];
@@ -486,7 +484,7 @@ export const submitForm = async (req: Request, res: Response) => {
         message: "Invalid form id",
       });
     }
-    console.log(form,"form");
+   
 
     const existingRecord = await Data.findOne({
       $or: [
@@ -495,17 +493,27 @@ export const submitForm = async (req: Request, res: Response) => {
         
       ], data: form?.formType 
     });
-    console.log(existingRecord,"existingRecord");
     
-    if (existingRecord) {
+    
+    if (existingRecord&&form?.status=== "shared") {
       return res.status(400).json({
         success: false,
         message: "Mobile number already exists.",
       });
+    }else if(!existingRecord&&form?.status==="in_progress"){
+      return res.status(400).json({
+        success: false,
+        message: "Record not found. Please submit the form first.",
+      });
     }
     let assignedStaff;
-    let staffAssignment
-    if (!form?.staffId) {
+    let staffAssignment;
+    
+    // Check if form already has a staff assigned
+    if (form?.staffId) {
+      assignedStaff = form.staffId;
+    } else {
+      // Assign staff using fair rotation system
       const staffMembers = await Staff.find({
         isDeleted: false,
         isActive: true,
@@ -518,7 +526,7 @@ export const submitForm = async (req: Request, res: Response) => {
         });
       }
 
-       staffAssignment = await StaffAssignment.findOne();
+      staffAssignment = await StaffAssignment.findOne();
 
       if (!staffAssignment) {
         staffAssignment = new StaffAssignment({
@@ -528,9 +536,11 @@ export const submitForm = async (req: Request, res: Response) => {
         await staffAssignment.save();
       }
 
+      // Reset index if it's invalid (staff might have been deleted)
       if (staffAssignment.lastAssignedStaffIndex >= staffMembers.length) {
         staffAssignment.lastAssignedStaffIndex = -1;
       }
+      
       const staffIndex =
         (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
       assignedStaff = staffMembers[staffIndex]._id;
@@ -560,7 +570,6 @@ export const submitForm = async (req: Request, res: Response) => {
       contactPersonName,
       assignedStaff: assignedStaff,
       isDeleted: false,
-      currentStep: 1,
     };
     if (form?.dataId) {
       newData = await Data.findByIdAndUpdate(form?.dataId, updateData,{ new: true, runValidators: true });
@@ -578,7 +587,21 @@ export const submitForm = async (req: Request, res: Response) => {
 
       await newData.save();
     }
-    await staffAssignment?.save();
+    form.status="in_progress"
+    form.dataId=newData?._id
+    form.currentStep=1
+    
+    // Only assign staff if not already assigned
+    if (!form.staffId) {
+      form.staffId = assignedStaff;
+    }
+    
+    await form.save();
+    
+    // Only save staff assignment if we created/updated it
+    if (staffAssignment) {
+      await staffAssignment.save();
+    }
     return res.status(201).json({
       success: true,
       message: "Form submitted successfully",
@@ -669,7 +692,6 @@ export const updateForm = async (req: Request, res: Response) => {
       updateFields.createProfileFor = createProfileFor;
     if (contactPersonName !== undefined)
       updateFields.contactPersonName = contactPersonName;
-    if (step !== undefined) updateFields.currentStep = step;
     if (status !== undefined) updateFields.status = status;
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
 
@@ -679,7 +701,14 @@ export const updateForm = async (req: Request, res: Response) => {
       updateFields,
       { new: true, runValidators: true }
     );
-
+    // Update FormTracking currentStep and status
+    if(step !== undefined) {
+      form.currentStep = step;
+    }
+    if(step === 3) {
+      form.status = "submitted";
+    }
+    await form.save();
     return res.status(200).json({
       success: true,
       message: "Form updated successfully",
@@ -1516,7 +1545,7 @@ export const getFormData = async (req: Request, res: Response) => {
     if (form?.dataId) {
       data = await Data.findOne({ _id: form?.dataId });
     }
-    console.log(data, "data");
+   
 
     return res.status(200).json({
       success: true,

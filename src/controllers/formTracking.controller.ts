@@ -6,7 +6,7 @@ import { generateUniqueTrackingId } from "../utils/helper";
 const trackFormShareSchema = z.object({
   formType: z.string().min(1),
   staffId: z.string().min(1),
-  dataId: z.string().min(1),
+  dataId: z.string().optional(),
  
 });
 
@@ -15,7 +15,7 @@ const trackFormShareSchema = z.object({
 export async function trackFormShare(req: Request, res: Response): Promise<void> {
   try {
     const parsed = trackFormShareSchema.safeParse(req.body);
-    console.log(req.body,"req.body");
+    
     
     if (!parsed.success) {
       res.status(400).json({ 
@@ -31,7 +31,7 @@ export async function trackFormShare(req: Request, res: Response): Promise<void>
     // Check if tracking ID already exists
     const existing = await FormTracking.findOne({ dataId, staffId,formType });
     if (existing) {
-      console.log("existing",existing);
+      
       
        res.status(201).json({
         success: true,
