@@ -4,14 +4,13 @@ export interface IFormTracking extends Document {
   trackingId: string;
   formType: string;
   staffId: mongoose.Types.ObjectId;
-  staffName: string;
+  dataId?: mongoose.Types.ObjectId;
   sharedAt: Date;
   submittedAt?: Date;
-  status: "shared" | "submitted" | "expired";
-  dataType: string;
+  status: "shared" | "in_progress" | "submitted" | "expired" | "abandoned";
   submittedData?: any;
-  conversionTime?: number; // Time between share and submission in milliseconds
   isActive: boolean;
+  currentStep: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,7 +25,6 @@ const FormTrackingSchema = new Schema<IFormTracking>(
     },
     formType: {
       type: String,
-      required: true,
       enum: ["bulk", "register", "house", "matrimony", "job"],
     },
     staffId: {
@@ -34,9 +32,9 @@ const FormTrackingSchema = new Schema<IFormTracking>(
       ref: "Staff",
       required: true,
     },
-    staffName: {
-      type: String,
-      required: true,
+    dataId: {
+      type: Schema.Types.ObjectId,
+      ref: "Data",
     },
     sharedAt: {
       type: Date,
@@ -49,22 +47,18 @@ const FormTrackingSchema = new Schema<IFormTracking>(
     status: {
       type: String,
       required: true,
-      enum: ["shared", "submitted", "expired"],
+      enum: ["shared", "in_progress", "submitted", "expired", "abandoned"],
       default: "shared",
     },
-    dataType: {
-      type: String,
-      required: true,
-    },
-    submittedData: {
-      type: Schema.Types.Mixed,
-    },
-    conversionTime: {
-      type: Number, // Time in milliseconds
-    },
+
     isActive: {
       type: Boolean,
       default: true,
+    },
+
+    currentStep: {
+      type: Number,
+      default: 0,
     },
   },
   {
@@ -72,10 +66,9 @@ const FormTrackingSchema = new Schema<IFormTracking>(
   }
 );
 
-// Index for efficient queries
-FormTrackingSchema.index({ staffId: 1, status: 1 });
-FormTrackingSchema.index({ formType: 1, status: 1 });
-FormTrackingSchema.index({ sharedAt: 1 });
 FormTrackingSchema.index({ trackingId: 1 });
 
-export const FormTracking = mongoose.model<IFormTracking>("FormTracking", FormTrackingSchema);
+export const FormTracking = mongoose.model<IFormTracking>(
+  "FormTracking",
+  FormTrackingSchema
+);
