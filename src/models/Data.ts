@@ -102,7 +102,6 @@ const DataSchema = new Schema<DataDocument>(
     vSampleSend: { type: String },
     processing: { type: String },
     visaDate: { type: String },
-    step: { type: Number },
     profilePhoto: { type: String },
   },
   { timestamps: true }

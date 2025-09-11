@@ -33,52 +33,13 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FormTracking = void 0;
+exports.StaffAssignment = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-const FormTrackingSchema = new mongoose_1.Schema({
-    trackingId: {
-        type: String,
-        required: true,
-        unique: true,
-        index: true,
-    },
-    formType: {
-        type: String,
-        enum: ["bulk", "register", "house", "matrimony", "job"],
-    },
-    staffId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: "Staff",
-    },
-    dataId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: "Data",
-    },
-    sharedAt: {
-        type: Date,
-        required: true,
-        default: Date.now,
-    },
-    submittedAt: {
-        type: Date,
-    },
-    status: {
-        type: String,
-        required: true,
-        enum: ["shared", "in_progress", "submitted", "expired", "abandoned"],
-        default: "shared",
-    },
-    isActive: {
-        type: Boolean,
-        default: true,
-    },
-    currentStep: {
-        type: Number,
-        default: 0,
-    },
-}, {
-    timestamps: true,
-});
-FormTrackingSchema.index({ trackingId: 1 });
-exports.FormTracking = mongoose_1.default.model("FormTracking", FormTrackingSchema);
-//# sourceMappingURL=FormTracking.js.map
+const StaffAssignmentSchema = new mongoose_1.Schema({
+    lastAssignedStaffIndex: { type: Number, default: -1 },
+    totalAssignedRecords: { type: Number, default: 0 },
+}, { timestamps: true });
+// Ensure only one document exists
+StaffAssignmentSchema.index({}, { unique: true });
+exports.StaffAssignment = mongoose_1.default.models.StaffAssignment || mongoose_1.default.model("StaffAssignment", StaffAssignmentSchema);
+//# sourceMappingURL=StaffAssignment.js.map

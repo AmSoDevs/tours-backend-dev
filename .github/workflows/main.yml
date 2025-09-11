@@ -42,8 +42,13 @@ jobs:
         if: success()
         run: |
           rsync -a --delete /home/dev/project/backend/Build_dir/ /home/dev/project/backend/Prod_dir/
+          
+      # Copy Env file
+      - name: Copy env file
+        run: |
+          cp /home/dev/project/backend/prod.env /home/dev/project/backend/Prod_dir/.env -r
 
-      # Restart backend with PM2 (using full path)
+      # Restart backend with PM2
       - name: Restart backend service
         working-directory: /home/dev/project/backend/Prod_dir
         run: |

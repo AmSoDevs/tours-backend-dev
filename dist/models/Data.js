@@ -38,7 +38,7 @@ const mongoose_1 = __importStar(require("mongoose"));
 const DataSchema = new mongoose_1.Schema({
     slNo: { type: String, required: true },
     profileId: { type: String },
-    dataType: { type: String, required: true },
+    dataType: { type: String },
     data: { type: String },
     verified: { type: String },
     mobile: { type: String, required: true, index: true },
@@ -85,7 +85,6 @@ const DataSchema = new mongoose_1.Schema({
     vSampleSend: { type: String },
     processing: { type: String },
     visaDate: { type: String },
-    step: { type: Number },
     profilePhoto: { type: String },
 }, { timestamps: true });
 DataSchema.index({ mobile: 1 }, { unique: true });

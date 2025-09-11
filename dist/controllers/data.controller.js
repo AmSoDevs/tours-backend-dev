@@ -1,16 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateStaffRow = exports.updateStaffRemarks = exports.updateStaffWhatsappClickTime = exports.updateStaffCallClickTime = exports.updateStaffDataStatus = exports.getStaffAssignedData = exports.updateRow = exports.updateForm = exports.submitForm = exports.updateRemarks = exports.updateWhatsappClickTime = exports.updateCallClickTime = exports.updateDataStatus = exports.getData = exports.importData = void 0;
+exports.getFormData = exports.updateStaffRow = exports.getStaffAssignmentStatus = exports.resetStaffAssignment = exports.updateStaffRemarks = exports.updateStaffWhatsappClickTime = exports.updateStaffCallClickTime = exports.updateStaffDataStatus = exports.getStaffAssignedData = exports.updateRow = exports.updateForm = exports.submitForm = exports.updateRemarks = exports.updateWhatsappClickTime = exports.updateCallClickTime = exports.updateDataStatus = exports.getData = exports.importData = void 0;
 const Data_1 = require("../models/Data");
 const Staff_1 = require("../models/Staff");
+const StaffAssignment_1 = require("../models/StaffAssignment");
 const helper_1 = require("../utils/helper");
+const FormTracking_1 = require("../models/FormTracking");
 const importData = async (req, res) => {
     try {
-        console.log("req.body:", req.body);
         const { dataType, data } = req.body;
-        // Check if there are existing records with non-numeric slNo that might conflict
         const existingNonNumericSlNo = await Data_1.Data.findOne({
-            slNo: { $not: /^\d{6}$/ }
+            slNo: { $not: /^\d{6}$/ },
         });
         if (existingNonNumericSlNo) {
             console.log("Warning: Found existing records with non-numeric slNo. These may cause conflicts.");
@@ -21,7 +21,6 @@ const importData = async (req, res) => {
                 message: "Invalid request data. dataType and data array are required.",
             });
         }
-        // Get all active staff members
         const staffMembers = await Staff_1.Staff.find({
             isDeleted: false,
             isActive: true,
@@ -32,6 +31,19 @@ const importData = async (req, res) => {
                 message: "No staff members available for data assignment.",
             });
         }
+        let staffAssignment = await StaffAssignment_1.StaffAssignment.findOne();
+        if (!staffAssignment) {
+            staffAssignment = new StaffAssignment_1.StaffAssignment({
+                lastAssignedStaffIndex: -1,
+                totalAssignedRecords: 0,
+            });
+            await staffAssignment.save();
+        }
+        if (staffAssignment.lastAssignedStaffIndex >= staffMembers.length) {
+            console.log(`Staff index ${staffAssignment.lastAssignedStaffIndex} is invalid for current staff array of length ${staffMembers.length}. Resetting to -1.`);
+            staffAssignment.lastAssignedStaffIndex = -1;
+        }
+        console.log(`Current staff assignment state: lastIndex=${staffAssignment.lastAssignedStaffIndex}, totalRecords=${staffAssignment.totalAssignedRecords}, activeStaff=${staffMembers.length}`);
         const results = {
             totalRecords: data.length,
             importedRecords: 0,
@@ -44,19 +56,25 @@ const importData = async (req, res) => {
             batches.push(data.slice(i, i + batchSize));
         }
         for (const batch of batches) {
-            console.log(`Processing batch with ${batch.length} records sequentially...`);
             for (let index = 0; index < batch.length; index++) {
                 const record = batch[index];
                 try {
                     const existingRecord = await Data_1.Data.findOne({
-                        mobile: record.mobile,
+                        $or: [
+                            { mobile: record.mobile },
+                            { refferenceNumber: record.mobile },
+                            { mobile: record.refferenceNumber },
+                            { refferenceNumber: record.refferenceNumber },
+                        ],
                     });
                     if (existingRecord) {
                         results.duplicateRecords++;
                         continue;
                     }
-                    const staffIndex = (results.importedRecords + index) % staffMembers.length;
+                    const staffIndex = (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
                     const assignedStaff = staffMembers[staffIndex]._id;
+                    staffAssignment.lastAssignedStaffIndex = staffIndex;
+                    staffAssignment.totalAssignedRecords += 1;
                     const slNo = await (0, helper_1.generateUniqueSlNo)();
                     const profileId = await (0, helper_1.generateUniqueProfileId)();
                     const newData = new Data_1.Data({
@@ -83,6 +101,7 @@ const importData = async (req, res) => {
                 }
             }
         }
+        await staffAssignment.save();
         return res.status(200).json({
             success: true,
             message: "Data import completed",
@@ -103,7 +122,6 @@ const getData = async (req, res) => {
     try {
         const { page = 1, limit, dataType, staffId, status, data: dataFilter, search, sortBy = "createdAt", sortOrder = "desc", } = req.query;
         const query = { isDeleted: false };
-        // Apply filters
         if (dataType && dataType !== "all") {
             query.dataType = { $regex: dataType, $options: "i" };
         }
@@ -111,14 +129,11 @@ const getData = async (req, res) => {
             query.assignedStaff = staffId;
         }
         if (status && status !== "all") {
-            // General regex search for other statuses
             query.status = { $regex: status, $options: "i" };
         }
         if (dataFilter && dataFilter !== "all") {
-            // Enhanced regex patterns for common data types
             query.data = { $regex: dataFilter, $options: "i" };
         }
-        // General search across multiple fields
         if (search && search !== "") {
             const searchRegex = { $regex: search, $options: "i" };
             query.$or = [
@@ -131,7 +146,6 @@ const getData = async (req, res) => {
                 { slNo: searchRegex },
             ];
         }
-        // Build sort object
         const sortObj = {};
         if (sortBy === "createdAt") {
             sortObj.createdAt = sortOrder === "desc" ? -1 : 1;
@@ -148,13 +162,10 @@ const getData = async (req, res) => {
         else if (sortBy === "status") {
             sortObj.status = sortOrder === "desc" ? -1 : 1;
         }
-        console.log("Query being executed:", JSON.stringify(query, null, 2));
-        console.log("Sort object:", JSON.stringify(sortObj, null, 2));
         let data;
         let total;
         let pagination;
         if (limit) {
-            // With pagination
             const skip = (Number(page) - 1) * Number(limit);
             data = await Data_1.Data.find(query)
                 .populate("assignedStaff", "name staffId")
@@ -170,7 +181,6 @@ const getData = async (req, res) => {
             };
         }
         else {
-            // Without pagination - get all records
             data = await Data_1.Data.find(query)
                 .populate("assignedStaff", "name staffId")
                 .sort(sortObj);
@@ -213,15 +223,12 @@ const updateDataStatus = async (req, res) => {
                 message: "Status is required.",
             });
         }
-        // Prepare update object
         const updateData = {
             status: status,
         };
-        // Add reminderDateAndTime if provided
         if (reminderDateAndTime) {
             updateData.reminderDateAndTime = new Date(reminderDateAndTime);
         }
-        // Update multiple records
         const updateResult = await Data_1.Data.updateMany({
             _id: { $in: ids },
         }, {
@@ -362,40 +369,75 @@ const updateRemarks = async (req, res) => {
 exports.updateRemarks = updateRemarks;
 const submitForm = async (req, res) => {
     try {
-        const { name, mobile, whatsapp, preferCountry, preferJobs, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, } = req.body;
-        // Validate required fields
+        const { name, mobile, whatsapp, preferCountry, preferJobs, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, trackingId, } = req.body;
         if (!name || !mobile) {
             return res.status(400).json({
                 success: false,
                 message: "Name and mobile number are required.",
             });
         }
-        // Check if mobile number already exists
-        const existingRecord = await Data_1.Data.findOne({ mobile });
-        if (existingRecord) {
+        const form = await FormTracking_1.FormTracking.findOne({ trackingId });
+        if (!form) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid form id",
+            });
+        }
+        const existingRecord = await Data_1.Data.findOne({
+            $or: [
+                { mobile: mobile },
+                { refferenceNumber: mobile },
+            ], data: form?.formType
+        });
+        if (existingRecord && form?.status === "shared") {
             return res.status(400).json({
                 success: false,
                 message: "Mobile number already exists.",
             });
         }
-        // Get a staff member to assign (round-robin or first available)
-        const staffMember = await Staff_1.Staff.findOne({
-            isDeleted: false,
-            isActive: true,
-        });
-        if (!staffMember) {
-            return res.status(500).json({
+        else if (!existingRecord && form?.status === "in_progress") {
+            return res.status(400).json({
                 success: false,
-                message: "No staff members available for assignment.",
+                message: "Record not found. Please submit the form first.",
             });
         }
-        const slNo = await (0, helper_1.generateUniqueSlNo)();
-        const profileId = await (0, helper_1.generateUniqueProfileId)();
-        const newData = new Data_1.Data({
-            slNo,
-            profileId,
-            dataType: "Self",
-            data: "register",
+        let assignedStaff;
+        let staffAssignment;
+        // Check if form already has a staff assigned
+        if (form?.staffId) {
+            assignedStaff = form.staffId;
+        }
+        else {
+            // Assign staff using fair rotation system
+            const staffMembers = await Staff_1.Staff.find({
+                isDeleted: false,
+                isActive: true,
+            }).select("_id");
+            if (staffMembers.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "No staff members available for data assignment.",
+                });
+            }
+            staffAssignment = await StaffAssignment_1.StaffAssignment.findOne();
+            if (!staffAssignment) {
+                staffAssignment = new StaffAssignment_1.StaffAssignment({
+                    lastAssignedStaffIndex: -1,
+                    totalAssignedRecords: 0,
+                });
+                await staffAssignment.save();
+            }
+            // Reset index if it's invalid (staff might have been deleted)
+            if (staffAssignment.lastAssignedStaffIndex >= staffMembers.length) {
+                staffAssignment.lastAssignedStaffIndex = -1;
+            }
+            const staffIndex = (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
+            assignedStaff = staffMembers[staffIndex]._id;
+            staffAssignment.lastAssignedStaffIndex = staffIndex;
+        }
+        let newData;
+        let updateData = {
+            data: form?.formType,
             mobile,
             name,
             whatsapp,
@@ -415,12 +457,36 @@ const submitForm = async (req, res) => {
             expectations,
             createProfileFor,
             contactPersonName,
-            assignedStaff: staffMember?._id,
+            assignedStaff: assignedStaff,
             isDeleted: false,
-            step: 1,
-            status: 'in_progress',
-        });
-        await newData.save();
+        };
+        if (form?.dataId) {
+            newData = await Data_1.Data.findByIdAndUpdate(form?.dataId, updateData, { new: true, runValidators: true });
+        }
+        else {
+            const slNo = await (0, helper_1.generateUniqueSlNo)();
+            const profileId = await (0, helper_1.generateUniqueProfileId)();
+            newData = new Data_1.Data({
+                ...updateData,
+                slNo,
+                profileId,
+                dataType: "self",
+                data: form?.formType,
+            });
+            await newData.save();
+        }
+        form.status = "in_progress";
+        form.dataId = newData?._id;
+        form.currentStep = 1;
+        // Only assign staff if not already assigned
+        if (!form.staffId) {
+            form.staffId = assignedStaff;
+        }
+        await form.save();
+        // Only save staff assignment if we created/updated it
+        if (staffAssignment) {
+            await staffAssignment.save();
+        }
         return res.status(201).json({
             success: true,
             message: "Form submitted successfully",
@@ -439,7 +505,7 @@ const submitForm = async (req, res) => {
 exports.submitForm = submitForm;
 const updateForm = async (req, res) => {
     try {
-        const { name, mobile, whatsapp, preferCountry, preferJobs, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, step, status, profilePhoto, } = req.body;
+        const { name, mobile, whatsapp, preferCountry, preferJobs, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, step, status, profilePhoto, trackingId, } = req.body;
         // Validate required fields
         if (!name || !mobile) {
             return res.status(400).json({
@@ -447,8 +513,16 @@ const updateForm = async (req, res) => {
                 message: "Name and mobile number are required.",
             });
         }
-        // Find existing record by mobile number
-        const existingRecord = await Data_1.Data.findOne({ mobile });
+        const form = await FormTracking_1.FormTracking.findOne({ trackingId });
+        if (!form) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid form id",
+            });
+        }
+        const existingRecord = await Data_1.Data.findOne({
+            $or: [{ mobile: mobile }, { refferenceNumber: mobile }, { data: form?.formType }],
+        });
         if (!existingRecord) {
             return res.status(404).json({
                 success: false,
@@ -491,14 +565,20 @@ const updateForm = async (req, res) => {
             updateFields.createProfileFor = createProfileFor;
         if (contactPersonName !== undefined)
             updateFields.contactPersonName = contactPersonName;
-        if (step !== undefined)
-            updateFields.step = step;
         if (status !== undefined)
             updateFields.status = status;
         if (profilePhoto !== undefined)
             updateFields.profilePhoto = profilePhoto;
         // Update the record
         const updatedRecord = await Data_1.Data.findByIdAndUpdate(existingRecord._id, updateFields, { new: true, runValidators: true });
+        // Update FormTracking currentStep and status
+        if (step !== undefined) {
+            form.currentStep = step;
+        }
+        if (step === 3) {
+            form.status = "submitted";
+        }
+        await form.save();
         return res.status(200).json({
             success: true,
             message: "Form updated successfully",
@@ -517,17 +597,13 @@ const updateForm = async (req, res) => {
 exports.updateForm = updateForm;
 const updateRow = async (req, res) => {
     try {
-        const { id, mobile, name, status, remarkFirst, remarkSecond, verified, dataType, refferenceNumber, refferenceName, 
-        // Register specific fields
-        regPayment, visaPay, contactPersonName, regReceived, payReceived, regBalance, payBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, visaDate, } = req.body;
-        console.log(req.body, "req body");
+        const { id, mobile, name, status, remarkFirst, remarkSecond, verified, dataType, refferenceNumber, refferenceName, regPayment, visaPay, contactPersonName, regReceived, payReceived, regBalance, payBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, visaDate, } = req.body;
         if (!id) {
             return res.status(400).json({
                 success: false,
                 message: "Record ID is required",
             });
         }
-        // Find the record by ID
         const existingRecord = await Data_1.Data.findById(id);
         if (!existingRecord) {
             return res.status(404).json({
@@ -535,7 +611,49 @@ const updateRow = async (req, res) => {
                 message: "Record not found",
             });
         }
-        // Prepare update object with only provided fields
+        if (mobile !== undefined || refferenceNumber !== undefined) {
+            if (mobile !== undefined &&
+                refferenceNumber !== undefined &&
+                mobile === refferenceNumber) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mobile number and reference number cannot be the same.",
+                });
+            }
+            if (mobile !== undefined &&
+                existingRecord.refferenceNumber &&
+                mobile === existingRecord.refferenceNumber) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mobile number cannot be the same as the existing reference number in this record.",
+                });
+            }
+            if (refferenceNumber !== undefined &&
+                existingRecord.mobile &&
+                refferenceNumber === existingRecord.mobile) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Reference number cannot be the same as the existing mobile number in this record.",
+                });
+            }
+            const duplicateCheckQuery = {
+                _id: { $ne: id }, // Exclude the current record being updated
+                $or: [],
+            };
+            if (mobile !== undefined) {
+                duplicateCheckQuery.$or.push({ mobile: mobile }, { refferenceNumber: mobile });
+            }
+            if (refferenceNumber !== undefined) {
+                duplicateCheckQuery.$or.push({ mobile: refferenceNumber }, { refferenceNumber: refferenceNumber });
+            }
+            const duplicateRecord = await Data_1.Data.findOne(duplicateCheckQuery);
+            if (duplicateRecord) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mobile number or reference number already exists in another record.",
+                });
+            }
+        }
         const updateFields = {};
         if (mobile !== undefined)
             updateFields.mobile = mobile;
@@ -555,7 +673,6 @@ const updateRow = async (req, res) => {
             updateFields.refferenceNumber = refferenceNumber;
         if (refferenceName !== undefined)
             updateFields.refferenceName = refferenceName;
-        // Register specific fields
         if (regPayment !== undefined)
             updateFields.regPayment = regPayment;
         if (visaPay !== undefined)
@@ -603,7 +720,10 @@ const updateRow = async (req, res) => {
         if (visaDate !== undefined)
             updateFields.visaDate = visaDate;
         // Update the record
-        const updatedRecord = await Data_1.Data.findByIdAndUpdate(id, updateFields, { new: true, runValidators: true });
+        const updatedRecord = await Data_1.Data.findByIdAndUpdate(id, updateFields, {
+            new: true,
+            runValidators: true,
+        });
         return res.status(200).json({
             success: true,
             message: "Record updated successfully",
@@ -626,7 +746,7 @@ const getStaffAssignedData = async (req, res) => {
         const { page = 1, limit, dataType, status, data: dataFilter, search, sortBy = "createdAt", sortOrder = "desc", } = req.query;
         const query = {
             isDeleted: false,
-            assignedStaff: staffId
+            assignedStaff: staffId,
         };
         // Apply filters
         if (dataType && dataType !== "all") {
@@ -634,6 +754,9 @@ const getStaffAssignedData = async (req, res) => {
         }
         if (status && status !== "all") {
             query.status = { $regex: status, $options: "i" };
+        }
+        else if (status === "all" || !status) {
+            query.status = { $in: [null, "", undefined] };
         }
         if (dataFilter && dataFilter !== "all") {
             query.data = { $regex: dataFilter, $options: "i" };
@@ -734,7 +857,7 @@ const updateStaffDataStatus = async (req, res) => {
         const records = await Data_1.Data.find({
             _id: { $in: ids },
             assignedStaff: staffId,
-            isDeleted: false
+            isDeleted: false,
         });
         if (records.length !== ids.length) {
             return res.status(403).json({
@@ -754,7 +877,7 @@ const updateStaffDataStatus = async (req, res) => {
         const updateResult = await Data_1.Data.updateMany({
             _id: { $in: ids },
             assignedStaff: staffId,
-            isDeleted: false
+            isDeleted: false,
         }, {
             $set: updateData,
         });
@@ -794,7 +917,7 @@ const updateStaffCallClickTime = async (req, res) => {
         const record = await Data_1.Data.findOne({
             _id: id,
             assignedStaff: staffId,
-            isDeleted: false
+            isDeleted: false,
         });
         if (!record) {
             return res.status(403).json({
@@ -837,7 +960,7 @@ const updateStaffWhatsappClickTime = async (req, res) => {
         const record = await Data_1.Data.findOne({
             _id: id,
             assignedStaff: staffId,
-            isDeleted: false
+            isDeleted: false,
         });
         if (!record) {
             return res.status(403).json({
@@ -880,7 +1003,7 @@ const updateStaffRemarks = async (req, res) => {
         const record = await Data_1.Data.findOne({
             _id: id,
             assignedStaff: staffId,
-            isDeleted: false
+            isDeleted: false,
         });
         if (!record) {
             return res.status(403).json({
@@ -912,6 +1035,89 @@ const updateStaffRemarks = async (req, res) => {
     }
 };
 exports.updateStaffRemarks = updateStaffRemarks;
+// Reset staff assignment rotation (useful when staff changes occur)
+const resetStaffAssignment = async (req, res) => {
+    try {
+        const staffAssignment = await StaffAssignment_1.StaffAssignment.findOne();
+        if (!staffAssignment) {
+            return res.status(404).json({
+                success: false,
+                message: "Staff assignment tracking not found.",
+            });
+        }
+        // Use the helper function to reset
+        await (0, helper_1.resetStaffAssignmentIfNeeded)();
+        // Get updated assignment for response
+        const updatedAssignment = await StaffAssignment_1.StaffAssignment.findOne();
+        return res.status(200).json({
+            success: true,
+            message: "Staff assignment rotation has been reset. Next import will start from the first staff member.",
+            data: {
+                lastAssignedStaffIndex: updatedAssignment?.lastAssignedStaffIndex || -1,
+                totalAssignedRecords: updatedAssignment?.totalAssignedRecords || 0,
+            },
+        });
+    }
+    catch (error) {
+        console.error("Error resetting staff assignment:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while resetting staff assignment",
+            error: error.message,
+        });
+    }
+};
+exports.resetStaffAssignment = resetStaffAssignment;
+// Get current staff assignment status
+const getStaffAssignmentStatus = async (req, res) => {
+    try {
+        const staffMembers = await Staff_1.Staff.find({
+            isDeleted: false,
+            isActive: true,
+        }).select("_id name staffId");
+        const staffAssignment = await StaffAssignment_1.StaffAssignment.findOne();
+        if (!staffAssignment) {
+            return res.status(200).json({
+                success: true,
+                message: "No staff assignment tracking found. Will be created on next import.",
+                data: {
+                    staffMembers: staffMembers.length,
+                    lastAssignedStaffIndex: -1,
+                    totalAssignedRecords: 0,
+                    nextStaffToReceive: staffMembers.length > 0
+                        ? staffMembers[0].name
+                        : "No staff available",
+                },
+            });
+        }
+        const nextStaffIndex = (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
+        const nextStaff = staffMembers[nextStaffIndex];
+        return res.status(200).json({
+            success: true,
+            data: {
+                staffMembers: staffMembers.length,
+                lastAssignedStaffIndex: staffAssignment.lastAssignedStaffIndex,
+                totalAssignedRecords: staffAssignment.totalAssignedRecords,
+                nextStaffToReceive: nextStaff ? nextStaff.name : "No staff available",
+                staffList: staffMembers.map((staff, index) => ({
+                    index,
+                    name: staff.name,
+                    staffId: staff.staffId,
+                    isNext: index === nextStaffIndex,
+                })),
+            },
+        });
+    }
+    catch (error) {
+        console.error("Error getting staff assignment status:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while getting staff assignment status",
+            error: error.message,
+        });
+    }
+};
+exports.getStaffAssignmentStatus = getStaffAssignmentStatus;
 const updateStaffRow = async (req, res) => {
     try {
         const { id: staffId } = req.params;
@@ -928,13 +1134,56 @@ const updateStaffRow = async (req, res) => {
         const record = await Data_1.Data.findOne({
             _id: id,
             assignedStaff: staffId,
-            isDeleted: false
+            isDeleted: false,
         });
         if (!record) {
             return res.status(403).json({
                 success: false,
                 message: "Record not found or not assigned to you.",
             });
+        }
+        if (mobile !== undefined || refferenceNumber !== undefined) {
+            if (mobile !== undefined &&
+                refferenceNumber !== undefined &&
+                mobile === refferenceNumber) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mobile number and reference number cannot be the same.",
+                });
+            }
+            if (mobile !== undefined &&
+                record.refferenceNumber &&
+                mobile === record.refferenceNumber) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mobile number cannot be the same as the existing reference number in this record.",
+                });
+            }
+            if (refferenceNumber !== undefined &&
+                record.mobile &&
+                refferenceNumber === record.mobile) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Reference number cannot be the same as the existing mobile number in this record.",
+                });
+            }
+            const duplicateCheckQuery = {
+                _id: { $ne: id },
+                $or: [],
+            };
+            if (mobile !== undefined) {
+                duplicateCheckQuery.$or.push({ mobile: mobile }, { refferenceNumber: mobile });
+            }
+            if (refferenceNumber !== undefined) {
+                duplicateCheckQuery.$or.push({ mobile: refferenceNumber }, { refferenceNumber: refferenceNumber });
+            }
+            const duplicateRecord = await Data_1.Data.findOne(duplicateCheckQuery);
+            if (duplicateRecord) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mobile number or reference number already exists in another record.",
+                });
+            }
         }
         // Prepare update object with only provided fields
         const updateFields = {};
@@ -1004,7 +1253,10 @@ const updateStaffRow = async (req, res) => {
         if (visaDate !== undefined)
             updateFields.visaDate = visaDate;
         // Update the record
-        const updatedRecord = await Data_1.Data.findByIdAndUpdate(id, updateFields, { new: true, runValidators: true });
+        const updatedRecord = await Data_1.Data.findByIdAndUpdate(id, updateFields, {
+            new: true,
+            runValidators: true,
+        });
         return res.status(200).json({
             success: true,
             message: "Record updated successfully",
@@ -1021,4 +1273,34 @@ const updateStaffRow = async (req, res) => {
     }
 };
 exports.updateStaffRow = updateStaffRow;
+const getFormData = async (req, res) => {
+    try {
+        const { trackingId } = req.query;
+        const form = await FormTracking_1.FormTracking.findOne({ trackingId }, { currentStep: 1, status: 1, dataId: 1 });
+        if (!form) {
+            return res.status(200).json({
+                success: false,
+                message: "No registration form found on this id",
+            });
+        }
+        let data;
+        if (form?.dataId) {
+            data = await Data_1.Data.findOne({ _id: form?.dataId });
+        }
+        return res.status(200).json({
+            success: true,
+            form,
+            data,
+        });
+    }
+    catch (error) {
+        console.error("Error fetching data:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error while fetching data",
+            error: error.message,
+        });
+    }
+};
+exports.getFormData = getFormData;
 //# sourceMappingURL=data.controller.js.map

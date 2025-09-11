@@ -54,7 +54,7 @@ async function staffLogin(req, res) {
         return;
     }
     const { email, password } = parsed.data;
-    const staff = await Staff_1.Staff.findOne({ email });
+    const staff = await Staff_1.Staff.findOne({ email, isDeleted: false, isActive: true });
     if (!staff) {
         res.status(401).json({ success: false, message: "Invalid credentials" });
         return;
