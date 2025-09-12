@@ -13,7 +13,7 @@ export const registrationRouter = Router();
 
 
 
-registrationRouter.use(authenticate, requireAdmin);
+registrationRouter.use(authenticate);
 
 
 registrationRouter.post("/share", trackFormShare);
