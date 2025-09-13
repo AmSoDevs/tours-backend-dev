@@ -10,6 +10,11 @@ const loginSchema = z.object({
 	password: z.string().min(1),
 });
 
+const staffLoginSchema = z.object({
+	emailOrUsername: z.string().min(1),
+	password: z.string().min(1),
+});
+
 export async function adminLogin(req: Request, res: Response): Promise<void> {
 	const parsed = loginSchema.safeParse(req.body);
 	if (!parsed.success) {
@@ -51,15 +56,24 @@ export async function adminLogin(req: Request, res: Response): Promise<void> {
 }
 
 export async function staffLogin(req: Request, res: Response): Promise<void> {
-	const parsed = loginSchema.safeParse(req.body);
+	const parsed = staffLoginSchema.safeParse(req.body);
 	if (!parsed.success) {
 		res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });
 		return;
 	}
 
-	const { email, password } = parsed.data;
+	const { emailOrUsername, password } = parsed.data;
 
-	const staff = await Staff.findOne({ email, isDeleted: false ,isActive:true});
+	// Search for staff by either email or username
+	const staff = await Staff.findOne({
+		$or: [
+			{ email: emailOrUsername },
+			{ username: emailOrUsername }
+		],
+		isDeleted: false,
+		isActive: true
+	});
+	
 	if (!staff) {
 		res.status(401).json({ success: false, message: "Invalid credentials" });
 		return;
@@ -76,6 +90,7 @@ export async function staffLogin(req: Request, res: Response): Promise<void> {
 		role: "staff" as const,
 		name: staff.name,
 		email: staff.email,
+		username: staff.username,
 		staffId: staff.staffId,
 	};
 	const secret: Secret = config.auth.jwtSecret as Secret;
@@ -89,7 +104,8 @@ export async function staffLogin(req: Request, res: Response): Promise<void> {
 		user: { 
 			id: String(staff._id),
 			name: staff.name, 
-			email: staff.email, 
+			email: staff.email,
+			username: staff.username,
 			role: "staff",
 			staffId: staff.staffId 
 		},
