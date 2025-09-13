@@ -10,45 +10,43 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      # Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Ensure build and prod directories exist
       - name: Ensure build and prod directories exist
         run: |
           mkdir -p /home/dev/project/backend/Build_dir
           mkdir -p /home/dev/project/backend/Prod_dir
 
-      # Clean Build_dir
       - name: Clean Build_dir
-        run: |
-          rm -rf /home/dev/project/backend/Build_dir/*
+        run: rm -rf /home/dev/project/backend/Build_dir/*
 
-      # Copy repo files to Build_dir
       - name: Copy code to Build_dir
-        run: |
-          rsync -a --delete $GITHUB_WORKSPACE/ /home/dev/project/backend/Build_dir/
+        run: cp -r $GITHUB_WORKSPACE/* /home/dev/project/backend/Build_dir/
 
-      # Install dependencies and build
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: /home/dev/project/backend/Build_dir/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install dependencies and build
         working-directory: /home/dev/project/backend/Build_dir
         run: |
           npm install
           npm run build
 
-      # Deploy only if build succeeds
       - name: Deploy to Prod_dir
         if: success()
         run: |
-          rsync -a --delete /home/dev/project/backend/Build_dir/ /home/dev/project/backend/Prod_dir/
-          
-      # Copy Env file
-      - name: Copy env file
-        run: |
-          cp /home/dev/project/backend/prod.env /home/dev/project/backend/Prod_dir/.env -r
+          rm -rf /home/dev/project/backend/Prod_dir/*
+          cp -r /home/dev/project/backend/Build_dir/* /home/dev/project/backend/Prod_dir/
 
-      # Restart backend with PM2
+      - name: Copy env file
+        run: cp /home/dev/project/backend/prod.env /home/dev/project/backend/Prod_dir/.env
+
       - name: Restart backend service
         working-directory: /home/dev/project/backend/Prod_dir
         run: |
