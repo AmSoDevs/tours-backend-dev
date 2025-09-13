@@ -52,6 +52,7 @@ jobs:
       - name: Restart backend service
         working-directory: /home/dev/project/backend/Prod_dir
         run: |
+          /usr/local/bin/pm2 stop backend
           /usr/local/bin/pm2 delete backend || true
           /usr/local/bin/pm2 start npm --name backend -- run start -- --host 0.0.0.0
           /usr/local/bin/pm2 save
