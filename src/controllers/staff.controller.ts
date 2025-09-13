@@ -20,6 +20,7 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
 	name: z.string().min(1).optional(),
+	email: z.string().email().optional(),
 	isActive: z.boolean().optional(),
 	username: z.string().min(3).optional(),
 	gender: z.enum(["male", "female", "other"]).optional(),
@@ -131,10 +132,34 @@ export async function updateStaff(req: Request, res: Response): Promise<void> {
 		res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });
 		return;
 	}
+	console.log(req.body);
+	
+	const d = parsed.data as any;
+	
+	if (d.email !== undefined || d.username !== undefined) {
+		const conflictQuery: any = { _id: { $ne: id } }; 
+		const orConditions: any[] = [];
+		
+		if (d.email !== undefined) {
+			orConditions.push({ email: d.email });
+		}
+		if (d.username !== undefined) {
+			orConditions.push({ username: d.username });
+		}
+		
+		if (orConditions.length > 0) {
+			conflictQuery.$or = orConditions;
+			const conflict = await Staff.findOne(conflictQuery);
+			if (conflict) {
+				res.status(409).json({ success: false, message: "Email or username already in use" });
+				return;
+			}
+		}
+	}
 	
 	const updates: Record<string, unknown> = {};
-	const d = parsed.data as any;
 	if (d.name !== undefined) updates.name = d.name;
+	if (d.email !== undefined) updates.email = d.email;
 	if (d.username !== undefined) updates.username = d.username;
 	if (d.gender !== undefined) updates.gender = d.gender;
 	if (d.dateOfBirth !== undefined) updates.dateOfBirth = d.dateOfBirth;
