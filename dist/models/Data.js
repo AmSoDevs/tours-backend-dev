@@ -46,6 +46,7 @@ const DataSchema = new mongoose_1.Schema({
     remarkFirst: { type: String },
     status: { type: String },
     refferenceNumber: { type: String },
+    whatsapp: { type: String },
     refferenceName: { type: String },
     remarkSecond: { type: String },
     assignedStaff: {

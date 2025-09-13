@@ -49,6 +49,7 @@ export interface DataDocument extends Document {
   visaDate?: string;
   step?: number;
   profilePhoto?: string;
+  whatsapp?: string;
 }
 
 const DataSchema = new Schema<DataDocument>(
@@ -63,6 +64,7 @@ const DataSchema = new Schema<DataDocument>(
     remarkFirst: { type: String },
     status: { type: String },
     refferenceNumber: { type: String },
+    whatsapp: { type: String },
     refferenceName: { type: String },
     remarkSecond: { type: String },
     assignedStaff: {
