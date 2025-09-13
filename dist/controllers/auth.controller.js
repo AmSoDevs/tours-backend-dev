@@ -14,6 +14,10 @@ const loginSchema = zod_1.z.object({
     email: zod_1.z.string().email(),
     password: zod_1.z.string().min(1),
 });
+const staffLoginSchema = zod_1.z.object({
+    emailOrUsername: zod_1.z.string().min(1),
+    password: zod_1.z.string().min(1),
+});
 async function adminLogin(req, res) {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -48,13 +52,21 @@ async function adminLogin(req, res) {
     });
 }
 async function staffLogin(req, res) {
-    const parsed = loginSchema.safeParse(req.body);
+    const parsed = staffLoginSchema.safeParse(req.body);
     if (!parsed.success) {
         res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });
         return;
     }
-    const { email, password } = parsed.data;
-    const staff = await Staff_1.Staff.findOne({ email, isDeleted: false, isActive: true });
+    const { emailOrUsername, password } = parsed.data;
+    // Search for staff by either email or username
+    const staff = await Staff_1.Staff.findOne({
+        $or: [
+            { email: emailOrUsername },
+            { username: emailOrUsername }
+        ],
+        isDeleted: false,
+        isActive: true
+    });
     if (!staff) {
         res.status(401).json({ success: false, message: "Invalid credentials" });
         return;
@@ -69,6 +81,7 @@ async function staffLogin(req, res) {
         role: "staff",
         name: staff.name,
         email: staff.email,
+        username: staff.username,
         staffId: staff.staffId,
     };
     const secret = config_1.config.auth.jwtSecret;
@@ -81,6 +94,7 @@ async function staffLogin(req, res) {
             id: String(staff._id),
             name: staff.name,
             email: staff.email,
+            username: staff.username,
             role: "staff",
             staffId: staff.staffId
         },
