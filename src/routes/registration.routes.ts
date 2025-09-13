@@ -2,7 +2,7 @@ import { Router } from "express";
 import { 
   trackFormShare, 
 } from "../controllers/formTracking.controller";
-import { authenticate, requireAdmin, requireStaff } from "../middleware/auth";
+import { authenticate, requireAdmin } from "../middleware/auth";
 
 export const registrationRouter = Router();
 

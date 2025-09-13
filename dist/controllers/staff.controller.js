@@ -24,6 +24,7 @@ const createSchema = zod_1.z.object({
 });
 const updateSchema = zod_1.z.object({
     name: zod_1.z.string().min(1).optional(),
+    email: zod_1.z.string().email().optional(),
     isActive: zod_1.z.boolean().optional(),
     username: zod_1.z.string().min(3).optional(),
     gender: zod_1.z.enum(["male", "female", "other"]).optional(),
@@ -123,10 +124,31 @@ async function updateStaff(req, res) {
         res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });
         return;
     }
-    const updates = {};
+    console.log(req.body);
     const d = parsed.data;
+    if (d.email !== undefined || d.username !== undefined) {
+        const conflictQuery = { _id: { $ne: id } };
+        const orConditions = [];
+        if (d.email !== undefined) {
+            orConditions.push({ email: d.email });
+        }
+        if (d.username !== undefined) {
+            orConditions.push({ username: d.username });
+        }
+        if (orConditions.length > 0) {
+            conflictQuery.$or = orConditions;
+            const conflict = await Staff_1.Staff.findOne(conflictQuery);
+            if (conflict) {
+                res.status(409).json({ success: false, message: "Email or username already in use" });
+                return;
+            }
+        }
+    }
+    const updates = {};
     if (d.name !== undefined)
         updates.name = d.name;
+    if (d.email !== undefined)
+        updates.email = d.email;
     if (d.username !== undefined)
         updates.username = d.username;
     if (d.gender !== undefined)
