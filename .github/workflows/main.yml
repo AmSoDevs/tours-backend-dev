@@ -28,7 +28,8 @@ jobs:
       # Copy repo files to Build_dir
       - name: Copy code to Build_dir
         run: |
-          rsync -a --delete $GITHUB_WORKSPACE/ /home/dev/project/backend/Build_dir/
+          rm -r /home/dev/project/backend/Build_dir/*
+          cp -r $GITHUB_WORKSPACE/ /home/dev/project/backend/Build_dir/.
 
       # Install dependencies and build
       - name: Install dependencies and build
@@ -41,7 +42,8 @@ jobs:
       - name: Deploy to Prod_dir
         if: success()
         run: |
-          rsync -a --delete /home/dev/project/backend/Build_dir/ /home/dev/project/backend/Prod_dir/
+          rm -r /home/dev/project/backend/Prod_dir/*
+          cp -r /home/dev/project/backend/Build_dir/ /home/dev/project/backend/Prod_dir/.
           
       # Copy Env file
       - name: Copy env file
