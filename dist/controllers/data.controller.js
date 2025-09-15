@@ -31,19 +31,6 @@ const importData = async (req, res) => {
                 message: "No staff members available for data assignment.",
             });
         }
-        let staffAssignment = await StaffAssignment_1.StaffAssignment.findOne();
-        if (!staffAssignment) {
-            staffAssignment = new StaffAssignment_1.StaffAssignment({
-                lastAssignedStaffIndex: -1,
-                totalAssignedRecords: 0,
-            });
-            await staffAssignment.save();
-        }
-        if (staffAssignment.lastAssignedStaffIndex >= staffMembers.length) {
-            console.log(`Staff index ${staffAssignment.lastAssignedStaffIndex} is invalid for current staff array of length ${staffMembers.length}. Resetting to -1.`);
-            staffAssignment.lastAssignedStaffIndex = -1;
-        }
-        console.log(`Current staff assignment state: lastIndex=${staffAssignment.lastAssignedStaffIndex}, totalRecords=${staffAssignment.totalAssignedRecords}, activeStaff=${staffMembers.length}`);
         const results = {
             totalRecords: data.length,
             importedRecords: 0,
@@ -55,6 +42,72 @@ const importData = async (req, res) => {
         for (let i = 0; i < data.length; i += batchSize) {
             batches.push(data.slice(i, i + batchSize));
         }
+        // Initialize staff assignment tracking
+        let staffAssignment = await StaffAssignment_1.StaffAssignment.findOne();
+        if (!staffAssignment) {
+            staffAssignment = new StaffAssignment_1.StaffAssignment({
+                lastAssignedStaffId: null,
+                totalAssignedRecords: 0,
+            });
+            await staffAssignment.save();
+        }
+        // Find the index of the last assigned staff in the current active staff array
+        let lastAssignedStaffIndex = -1;
+        if (staffAssignment.lastAssignedStaffId) {
+            lastAssignedStaffIndex = staffMembers.findIndex(staff => staff._id.toString() === staffAssignment.lastAssignedStaffId);
+        }
+        // If the last assigned staff is not in the current active staff array, 
+        // find the next staff in the original rotation sequence
+        if (lastAssignedStaffIndex === -1 && staffAssignment.lastAssignedStaffId) {
+            console.log(`Last assigned staff (${staffAssignment.lastAssignedStaffId}) not found in current active staff. Finding next staff in rotation.`);
+            // Get all staff (including inactive but excluding deleted) to determine original sequence
+            const allStaff = await Staff_1.Staff.find({
+                isDeleted: false,
+            }).select("_id").sort({ _id: 1 }); // Sort by creation order for consistent sequence
+            const lastAssignedIndexInAll = allStaff.findIndex(staff => staff._id.toString() === staffAssignment.lastAssignedStaffId);
+            if (lastAssignedIndexInAll !== -1) {
+                // Last assigned staff exists (not deleted), find next active staff in rotation
+                for (let i = 1; i < allStaff.length; i++) {
+                    const nextIndex = (lastAssignedIndexInAll + i) % allStaff.length;
+                    const nextStaff = allStaff[nextIndex];
+                    const activeIndex = staffMembers.findIndex(staff => staff._id.toString() === nextStaff._id.toString());
+                    if (activeIndex !== -1) {
+                        lastAssignedStaffIndex = activeIndex - 1; // Set to previous index so next assignment goes to this staff
+                        console.log(`Found next active staff in rotation: ${nextStaff._id} at index ${activeIndex}`);
+                        break;
+                    }
+                }
+            }
+            else {
+                // Last assigned staff was deleted, find next active staff from original rotation
+                console.log(`Last assigned staff (${staffAssignment.lastAssignedStaffId}) was deleted. Finding next active staff in rotation.`);
+                // Get all staff including deleted to find original position
+                const allStaffIncludingDeleted = await Staff_1.Staff.find({
+                // No filter to include deleted staff
+                }).select("_id").sort({ _id: 1 });
+                // Find the deleted staff's original position
+                const deletedStaffIndex = allStaffIncludingDeleted.findIndex(staff => staff._id.toString() === staffAssignment.lastAssignedStaffId);
+                if (deletedStaffIndex !== -1) {
+                    // Find next active staff after the deleted one
+                    for (let i = 1; i < allStaffIncludingDeleted.length; i++) {
+                        const nextIndex = (deletedStaffIndex + i) % allStaffIncludingDeleted.length;
+                        const nextStaff = allStaffIncludingDeleted[nextIndex];
+                        const activeIndex = staffMembers.findIndex(staff => staff._id.toString() === nextStaff._id.toString());
+                        if (activeIndex !== -1) {
+                            lastAssignedStaffIndex = activeIndex - 1; // Set to previous index so next assignment goes to this staff
+                            console.log(`Found next active staff after deleted staff: ${nextStaff._id} at index ${activeIndex}`);
+                            break;
+                        }
+                    }
+                }
+            }
+            // If no next active staff found in rotation, start from beginning
+            if (lastAssignedStaffIndex === -1) {
+                console.log("No next active staff found in rotation. Starting from first staff.");
+                lastAssignedStaffIndex = -1;
+            }
+        }
+        console.log(`Current staff assignment state: lastAssignedStaffId=${staffAssignment.lastAssignedStaffId}, lastIndex=${lastAssignedStaffIndex}, totalRecords=${staffAssignment.totalAssignedRecords}, activeStaff=${staffMembers.length}`);
         for (const batch of batches) {
             for (let index = 0; index < batch.length; index++) {
                 const record = batch[index];
@@ -71,9 +124,12 @@ const importData = async (req, res) => {
                         results.duplicateRecords++;
                         continue;
                     }
-                    const staffIndex = (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
+                    // Only assign staff for records that will actually be imported
+                    const staffIndex = (lastAssignedStaffIndex + 1) % staffMembers.length;
                     const assignedStaff = staffMembers[staffIndex]._id;
-                    staffAssignment.lastAssignedStaffIndex = staffIndex;
+                    // Update the last assigned staff ID and index for next iteration
+                    staffAssignment.lastAssignedStaffId = assignedStaff.toString();
+                    lastAssignedStaffIndex = staffIndex;
                     staffAssignment.totalAssignedRecords += 1;
                     const slNo = await (0, helper_1.generateUniqueSlNo)();
                     const profileId = await (0, helper_1.generateUniqueProfileId)();
@@ -101,6 +157,7 @@ const importData = async (req, res) => {
                 }
             }
         }
+        // Save the final staff assignment state
         await staffAssignment.save();
         return res.status(200).json({
             success: true,
@@ -419,21 +476,10 @@ const submitForm = async (req, res) => {
                     message: "No staff members available for data assignment.",
                 });
             }
-            staffAssignment = await StaffAssignment_1.StaffAssignment.findOne();
-            if (!staffAssignment) {
-                staffAssignment = new StaffAssignment_1.StaffAssignment({
-                    lastAssignedStaffIndex: -1,
-                    totalAssignedRecords: 0,
-                });
-                await staffAssignment.save();
-            }
-            // Reset index if it's invalid (staff might have been deleted)
-            if (staffAssignment.lastAssignedStaffIndex >= staffMembers.length) {
-                staffAssignment.lastAssignedStaffIndex = -1;
-            }
-            const staffIndex = (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
-            assignedStaff = staffMembers[staffIndex]._id;
-            staffAssignment.lastAssignedStaffIndex = staffIndex;
+            // Use the single record staff assignment helper function
+            const { assignedStaffId, staffAssignment: updatedStaffAssignment } = await (0, helper_1.assignStaffForSingleRecord)(staffMembers);
+            assignedStaff = assignedStaffId;
+            staffAssignment = updatedStaffAssignment;
         }
         let newData;
         let updateData = {
@@ -483,10 +529,7 @@ const submitForm = async (req, res) => {
             form.staffId = assignedStaff;
         }
         await form.save();
-        // Only save staff assignment if we created/updated it
-        if (staffAssignment) {
-            await staffAssignment.save();
-        }
+        // Staff assignment is already saved by the helper function
         return res.status(201).json({
             success: true,
             message: "Form submitted successfully",
@@ -1053,7 +1096,7 @@ const resetStaffAssignment = async (req, res) => {
             success: true,
             message: "Staff assignment rotation has been reset. Next import will start from the first staff member.",
             data: {
-                lastAssignedStaffIndex: updatedAssignment?.lastAssignedStaffIndex || -1,
+                lastAssignedStaffId: updatedAssignment?.lastAssignedStaffId || null,
                 totalAssignedRecords: updatedAssignment?.totalAssignedRecords || 0,
             },
         });
@@ -1082,7 +1125,7 @@ const getStaffAssignmentStatus = async (req, res) => {
                 message: "No staff assignment tracking found. Will be created on next import.",
                 data: {
                     staffMembers: staffMembers.length,
-                    lastAssignedStaffIndex: -1,
+                    lastAssignedStaffId: null,
                     totalAssignedRecords: 0,
                     nextStaffToReceive: staffMembers.length > 0
                         ? staffMembers[0].name
@@ -1090,13 +1133,19 @@ const getStaffAssignmentStatus = async (req, res) => {
                 },
             });
         }
-        const nextStaffIndex = (staffAssignment.lastAssignedStaffIndex + 1) % staffMembers.length;
+        // Find the index of the last assigned staff in the current active staff array
+        let lastAssignedStaffIndex = -1;
+        if (staffAssignment.lastAssignedStaffId) {
+            lastAssignedStaffIndex = staffMembers.findIndex(staff => staff._id.toString() === staffAssignment.lastAssignedStaffId);
+        }
+        const nextStaffIndex = (lastAssignedStaffIndex + 1) % staffMembers.length;
         const nextStaff = staffMembers[nextStaffIndex];
         return res.status(200).json({
             success: true,
             data: {
                 staffMembers: staffMembers.length,
-                lastAssignedStaffIndex: staffAssignment.lastAssignedStaffIndex,
+                lastAssignedStaffId: staffAssignment.lastAssignedStaffId,
+                lastAssignedStaffIndex: lastAssignedStaffIndex,
                 totalAssignedRecords: staffAssignment.totalAssignedRecords,
                 nextStaffToReceive: nextStaff ? nextStaff.name : "No staff available",
                 staffList: staffMembers.map((staff, index) => ({

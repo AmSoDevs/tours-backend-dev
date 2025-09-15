@@ -2,7 +2,7 @@ import mongoose, { Document, Model, Schema } from "mongoose";
 
 export interface StaffAssignmentDocument extends Document {
   _id: string;
-  lastAssignedStaffIndex: number;
+  lastAssignedStaffId: string | null;
   totalAssignedRecords: number;
   updatedAt: Date;
   createdAt: Date;
@@ -10,7 +10,7 @@ export interface StaffAssignmentDocument extends Document {
 
 const StaffAssignmentSchema = new Schema<StaffAssignmentDocument>(
   {
-    lastAssignedStaffIndex: { type: Number, default: -1 },
+    lastAssignedStaffId: { type: String, default: null },
     totalAssignedRecords: { type: Number, default: 0 },
   },
   { timestamps: true }

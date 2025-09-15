@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StaffAssignment = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const StaffAssignmentSchema = new mongoose_1.Schema({
-    lastAssignedStaffIndex: { type: Number, default: -1 },
+    lastAssignedStaffId: { type: String, default: null },
     totalAssignedRecords: { type: Number, default: 0 },
 }, { timestamps: true });
 // Ensure only one document exists
