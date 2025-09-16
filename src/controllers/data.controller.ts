@@ -252,7 +252,12 @@ export const getData = async (req: Request, res: Response) => {
     }
 
     if (dataFilter && dataFilter !== "all") {
-      query.data = { $regex: dataFilter, $options: "i" };
+      if (dataFilter === "register") {
+        
+        query.data = { $in: ["register", "house", "matrimony", "job", "visa"] };
+      } else {
+        query.data = { $regex: dataFilter, $options: "i" };
+      }
     }
 
     if (search && search !== "") {

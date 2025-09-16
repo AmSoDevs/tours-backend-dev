@@ -189,7 +189,12 @@ const getData = async (req, res) => {
             query.status = { $regex: status, $options: "i" };
         }
         if (dataFilter && dataFilter !== "all") {
-            query.data = { $regex: dataFilter, $options: "i" };
+            if (dataFilter === "register") {
+                query.data = { $in: ["register", "house", "matrimony", "job", "visa"] };
+            }
+            else {
+                query.data = { $regex: dataFilter, $options: "i" };
+            }
         }
         if (search && search !== "") {
             const searchRegex = { $regex: search, $options: "i" };
