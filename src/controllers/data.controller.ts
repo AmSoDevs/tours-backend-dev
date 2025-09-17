@@ -532,6 +532,7 @@ export const submitForm = async (req: Request, res: Response) => {
       whatsapp,
       preferCountry,
       preferJobs,
+      job,
       searchedHouses,
       gender,
       dateOfBirth,
@@ -617,6 +618,7 @@ export const submitForm = async (req: Request, res: Response) => {
       whatsapp,
       preferCountry,
       preferJobs,
+      job,
       searchedHouses,
       gender,
       dateOfBirth,
@@ -631,6 +633,15 @@ export const submitForm = async (req: Request, res: Response) => {
       expectations,
       createProfileFor,
       contactPersonName,
+      houseType: req.body.houseType,
+      priceRange: req.body.priceRange,
+      prefferedPlace: req.body.prefferedPlace,
+      caste: req.body.caste,
+      passportNo: req.body.passportNo,
+      aadharId: req.body.aadharId,
+      prefferedSalary: req.body.prefferedSalary,
+      visaType: req.body.visaType,
+      prefferedCourse: req.body.prefferedCourse,
       assignedStaff: assignedStaff,
       isDeleted: false,
     };
@@ -685,6 +696,7 @@ export const updateForm = async (req: Request, res: Response) => {
       whatsapp,
       preferCountry,
       preferJobs,
+      job,
       searchedHouses,
       gender,
       dateOfBirth,
@@ -734,6 +746,7 @@ export const updateForm = async (req: Request, res: Response) => {
     if (whatsapp !== undefined) updateFields.whatsapp = whatsapp;
     if (preferCountry !== undefined) updateFields.preferCountry = preferCountry;
     if (preferJobs !== undefined) updateFields.preferJobs = preferJobs;
+    if (job !== undefined) updateFields.job = job;
     if (searchedHouses !== undefined)
       updateFields.searchedHouses = searchedHouses;
     if (gender !== undefined) updateFields.gender = gender;
@@ -752,6 +765,15 @@ export const updateForm = async (req: Request, res: Response) => {
       updateFields.createProfileFor = createProfileFor;
     if (contactPersonName !== undefined)
       updateFields.contactPersonName = contactPersonName;
+    if (req.body.houseType !== undefined) updateFields.houseType = req.body.houseType;
+    if (req.body.priceRange !== undefined) updateFields.priceRange = req.body.priceRange;
+    if (req.body.prefferedPlace !== undefined) updateFields.prefferedPlace = req.body.prefferedPlace;
+    if (req.body.caste !== undefined) updateFields.caste = req.body.caste;
+    if (req.body.passportNo !== undefined) updateFields.passportNo = req.body.passportNo;
+    if (req.body.aadharId !== undefined) updateFields.aadharId = req.body.aadharId;
+    if (req.body.prefferedSalary !== undefined) updateFields.prefferedSalary = req.body.prefferedSalary;
+    if (req.body.visaType !== undefined) updateFields.visaType = req.body.visaType;
+    if (req.body.prefferedCourse !== undefined) updateFields.prefferedCourse = req.body.prefferedCourse;
     if (status !== undefined) updateFields.status = status;
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
 
