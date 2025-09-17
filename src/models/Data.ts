@@ -44,6 +44,7 @@ export interface DataDocument extends Document {
   regBalance?: string;
   payBalance?: string;
   passportNo?: string;
+  aadharId?: string;
   vSampleSend?: string;
   processing?: string;
   visaDate?: string;

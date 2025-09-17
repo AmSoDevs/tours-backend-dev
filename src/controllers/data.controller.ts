@@ -1602,7 +1602,7 @@ export const getFormData = async (req: Request, res: Response) => {
 
     const form = await FormTracking.findOne(
       { trackingId },
-      { currentStep: 1, status: 1, dataId: 1 }
+      { currentStep: 1, status: 1, dataId: 1,formType:1 }
     );
     if (!form) {
       return res.status(200).json({
