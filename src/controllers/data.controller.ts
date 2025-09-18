@@ -741,7 +741,6 @@ export const updateForm = async (req: Request, res: Response) => {
       });
     }
 
-    // Prepare update object with only provided fields
     const updateFields: any = {};
     if (whatsapp !== undefined) updateFields.whatsapp = whatsapp;
     if (preferCountry !== undefined) updateFields.preferCountry = preferCountry;
@@ -1648,6 +1647,44 @@ export const getFormData = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: "Internal server error while fetching data",
+      error: error.message,
+    });
+  }
+};
+
+export const softDeleteData = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Data ID is required",
+      });
+    }
+
+    const data = await Data.findByIdAndUpdate(
+      id,
+      { isDeleted: true },
+      { new: true }
+    );
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Data record not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Data record deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("Error soft deleting data:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while deleting data",
       error: error.message,
     });
   }
