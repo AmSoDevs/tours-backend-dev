@@ -6,7 +6,6 @@ import {
   generateUniqueProfileId,
   generateUniqueSlNo,
   resetStaffAssignmentIfNeeded,
-  assignStaffWithRotation,
   assignStaffForSingleRecord,
 } from "../utils/helper";
 import { FormTracking } from "../models/FormTracking";
@@ -284,6 +283,10 @@ export const getData = async (req: Request, res: Response) => {
       sortObj.mobile = sortOrder === "desc" ? -1 : 1;
     } else if (sortBy === "status") {
       sortObj.status = sortOrder === "desc" ? -1 : 1;
+    } else if (sortBy === "slNo") {
+      sortObj.slNo = sortOrder === "desc" ? -1 : 1;
+    } else if (sortBy === "assignedStaff.staffId") {
+      sortObj["assignedStaff.staffId"] = sortOrder === "desc" ? -1 : 1;
     }
 
     let data;
@@ -1040,6 +1043,10 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       sortObj.mobile = sortOrder === "desc" ? -1 : 1;
     } else if (sortBy === "status") {
       sortObj.status = sortOrder === "desc" ? -1 : 1;
+    } else if (sortBy === "slNo") {
+      sortObj.slNo = sortOrder === "desc" ? -1 : 1;
+    } else if (sortBy === "assignedStaff.staffId") {
+      sortObj["assignedStaff.staffId"] = sortOrder === "desc" ? -1 : 1;
     }
 
     let data;
