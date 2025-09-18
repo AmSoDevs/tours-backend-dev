@@ -21,8 +21,9 @@ export interface DataDocument extends Document {
   whatsappClickTime?: Date;
   refferenceCallClickTime?: Date;
   refferenceWhatsappClickTime?: Date;
-  preferCountry: string;
-  preferJobs: string;
+  preferCountry: string[];
+  preferJobs: string[];
+  job: string;
   searchedHouses: string;
   gender: string;
   dateOfBirth: string;
@@ -31,12 +32,19 @@ export interface DataDocument extends Document {
   education: string;
   jobType: string;
   monthlyIncome: string;
-  spokenLanguage: string;
+  spokenLanguage: string[];
   district: string;
   city: string;
   expectations: string;
   createProfileFor: string;
   contactPersonName: string;
+  houseType?: string;
+  priceRange?: string;
+  prefferedPlace?: string;
+  caste?: string;
+  prefferedSalary?: string;
+  visaType?: string;
+  prefferedCourse?: string;
   regPayment?: string;
   visaPay?: string;
   regReceived?: string;
@@ -44,6 +52,7 @@ export interface DataDocument extends Document {
   regBalance?: string;
   payBalance?: string;
   passportNo?: string;
+  aadharId?: string;
   vSampleSend?: string;
   processing?: string;
   visaDate?: string;
@@ -78,8 +87,9 @@ const DataSchema = new Schema<DataDocument>(
     whatsappClickTime: { type: Date },
     refferenceCallClickTime: { type: Date },
     refferenceWhatsappClickTime: { type: Date },
-    preferCountry: { type: String },
-    preferJobs: { type: String },
+    preferCountry: { type: [String], default: [] },
+    preferJobs: { type: [String], default: [] },
+    job: { type: String },
     searchedHouses: { type: String },
     gender: { type: String },
     dateOfBirth: { type: String },
@@ -88,12 +98,19 @@ const DataSchema = new Schema<DataDocument>(
     education: { type: String },
     jobType: { type: String },
     monthlyIncome: { type: String },
-    spokenLanguage: { type: String },
+    spokenLanguage: { type: [String], default: [] },
     district: { type: String },
     city: { type: String },
     expectations: { type: String },
     createProfileFor: { type: String },
     contactPersonName: { type: String },
+    houseType: { type: String },
+    priceRange: { type: String },
+    prefferedPlace: { type: String },
+    caste: { type: String },
+    prefferedSalary: { type: String },
+    visaType: { type: String },
+    prefferedCourse: { type: String },
     regPayment: { type: String },
     visaPay: { type: String },
     regReceived: { type: String },
@@ -101,6 +118,7 @@ const DataSchema = new Schema<DataDocument>(
     regBalance: { type: String },
     payBalance: { type: String },
     passportNo: { type: String },
+    aadharId: { type: String },
     vSampleSend: { type: String },
     processing: { type: String },
     visaDate: { type: String },

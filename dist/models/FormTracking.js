@@ -44,7 +44,7 @@ const FormTrackingSchema = new mongoose_1.Schema({
     },
     formType: {
         type: String,
-        enum: ["bulk", "register", "house", "matrimony", "job"],
+        enum: ["bulk", "lead", "register", "house", "matrimony", "job", "visa"],
     },
     staffId: {
         type: mongoose_1.Schema.Types.ObjectId,

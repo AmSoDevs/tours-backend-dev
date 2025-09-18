@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getFormData = exports.updateStaffRow = exports.getStaffAssignmentStatus = exports.resetStaffAssignment = exports.updateStaffRemarks = exports.updateStaffWhatsappClickTime = exports.updateStaffCallClickTime = exports.updateStaffDataStatus = exports.getStaffAssignedData = exports.updateRow = exports.updateForm = exports.submitForm = exports.updateRemarks = exports.updateWhatsappClickTime = exports.updateCallClickTime = exports.updateDataStatus = exports.getData = exports.importData = void 0;
+exports.softDeleteData = exports.getFormData = exports.updateStaffRow = exports.getStaffAssignmentStatus = exports.resetStaffAssignment = exports.updateStaffRemarks = exports.updateStaffWhatsappClickTime = exports.updateStaffCallClickTime = exports.updateStaffDataStatus = exports.getStaffAssignedData = exports.updateRow = exports.updateForm = exports.submitForm = exports.updateRemarks = exports.updateWhatsappClickTime = exports.updateCallClickTime = exports.updateDataStatus = exports.getData = exports.importData = void 0;
 const Data_1 = require("../models/Data");
 const Staff_1 = require("../models/Staff");
 const StaffAssignment_1 = require("../models/StaffAssignment");
@@ -51,86 +51,33 @@ const importData = async (req, res) => {
             });
             await staffAssignment.save();
         }
-        // Find the index of the last assigned staff in the current active staff array
-        let lastAssignedStaffIndex = -1;
-        if (staffAssignment.lastAssignedStaffId) {
-            lastAssignedStaffIndex = staffMembers.findIndex(staff => staff._id.toString() === staffAssignment.lastAssignedStaffId);
-        }
-        // If the last assigned staff is not in the current active staff array, 
-        // find the next staff in the original rotation sequence
-        if (lastAssignedStaffIndex === -1 && staffAssignment.lastAssignedStaffId) {
-            console.log(`Last assigned staff (${staffAssignment.lastAssignedStaffId}) not found in current active staff. Finding next staff in rotation.`);
-            // Get all staff (including inactive but excluding deleted) to determine original sequence
-            const allStaff = await Staff_1.Staff.find({
-                isDeleted: false,
-            }).select("_id").sort({ _id: 1 }); // Sort by creation order for consistent sequence
-            const lastAssignedIndexInAll = allStaff.findIndex(staff => staff._id.toString() === staffAssignment.lastAssignedStaffId);
-            if (lastAssignedIndexInAll !== -1) {
-                // Last assigned staff exists (not deleted), find next active staff in rotation
-                for (let i = 1; i < allStaff.length; i++) {
-                    const nextIndex = (lastAssignedIndexInAll + i) % allStaff.length;
-                    const nextStaff = allStaff[nextIndex];
-                    const activeIndex = staffMembers.findIndex(staff => staff._id.toString() === nextStaff._id.toString());
-                    if (activeIndex !== -1) {
-                        lastAssignedStaffIndex = activeIndex - 1; // Set to previous index so next assignment goes to this staff
-                        console.log(`Found next active staff in rotation: ${nextStaff._id} at index ${activeIndex}`);
-                        break;
-                    }
-                }
-            }
-            else {
-                // Last assigned staff was deleted, find next active staff from original rotation
-                console.log(`Last assigned staff (${staffAssignment.lastAssignedStaffId}) was deleted. Finding next active staff in rotation.`);
-                // Get all staff including deleted to find original position
-                const allStaffIncludingDeleted = await Staff_1.Staff.find({
-                // No filter to include deleted staff
-                }).select("_id").sort({ _id: 1 });
-                // Find the deleted staff's original position
-                const deletedStaffIndex = allStaffIncludingDeleted.findIndex(staff => staff._id.toString() === staffAssignment.lastAssignedStaffId);
-                if (deletedStaffIndex !== -1) {
-                    // Find next active staff after the deleted one
-                    for (let i = 1; i < allStaffIncludingDeleted.length; i++) {
-                        const nextIndex = (deletedStaffIndex + i) % allStaffIncludingDeleted.length;
-                        const nextStaff = allStaffIncludingDeleted[nextIndex];
-                        const activeIndex = staffMembers.findIndex(staff => staff._id.toString() === nextStaff._id.toString());
-                        if (activeIndex !== -1) {
-                            lastAssignedStaffIndex = activeIndex - 1; // Set to previous index so next assignment goes to this staff
-                            console.log(`Found next active staff after deleted staff: ${nextStaff._id} at index ${activeIndex}`);
-                            break;
-                        }
-                    }
-                }
-            }
-            // If no next active staff found in rotation, start from beginning
-            if (lastAssignedStaffIndex === -1) {
-                console.log("No next active staff found in rotation. Starting from first staff.");
-                lastAssignedStaffIndex = -1;
-            }
-        }
-        console.log(`Current staff assignment state: lastAssignedStaffId=${staffAssignment.lastAssignedStaffId}, lastIndex=${lastAssignedStaffIndex}, totalRecords=${staffAssignment.totalAssignedRecords}, activeStaff=${staffMembers.length}`);
         for (const batch of batches) {
             for (let index = 0; index < batch.length; index++) {
                 const record = batch[index];
+                console.log(record, "record");
                 try {
-                    const existingRecord = await Data_1.Data.findOne({
-                        $or: [
-                            { mobile: record.mobile },
-                            { refferenceNumber: record.mobile },
-                            { mobile: record.refferenceNumber },
-                            { refferenceNumber: record.refferenceNumber },
-                        ],
-                    });
+                    // Build duplicate check query with proper null handling
+                    const duplicateQuery = [];
+                    if (record.mobile) {
+                        duplicateQuery.push({ mobile: record.mobile });
+                        duplicateQuery.push({ refferenceNumber: record.mobile });
+                    }
+                    if (record.refferenceNumber) {
+                        duplicateQuery.push({ mobile: record.refferenceNumber });
+                        duplicateQuery.push({ refferenceNumber: record.refferenceNumber });
+                    }
+                    const existingRecord = duplicateQuery.length > 0
+                        ? await Data_1.Data.findOne({ $or: duplicateQuery })
+                        : null;
+                    console.log(existingRecord, "existingRecord");
                     if (existingRecord) {
                         results.duplicateRecords++;
                         continue;
                     }
-                    // Only assign staff for records that will actually be imported
-                    const staffIndex = (lastAssignedStaffIndex + 1) % staffMembers.length;
-                    const assignedStaff = staffMembers[staffIndex]._id;
-                    // Update the last assigned staff ID and index for next iteration
-                    staffAssignment.lastAssignedStaffId = assignedStaff.toString();
-                    lastAssignedStaffIndex = staffIndex;
-                    staffAssignment.totalAssignedRecords += 1;
+                    // Use helper function to assign staff for non-duplicate records only
+                    const { assignedStaffId, staffAssignment: updatedStaffAssignment } = await (0, helper_1.assignStaffWithRotation)(staffMembers);
+                    const assignedStaff = assignedStaffId;
+                    staffAssignment = updatedStaffAssignment;
                     const slNo = await (0, helper_1.generateUniqueSlNo)();
                     const profileId = await (0, helper_1.generateUniqueProfileId)();
                     const newData = new Data_1.Data({
@@ -157,8 +104,6 @@ const importData = async (req, res) => {
                 }
             }
         }
-        // Save the final staff assignment state
-        await staffAssignment.save();
         return res.status(200).json({
             success: true,
             message: "Data import completed",
@@ -189,7 +134,12 @@ const getData = async (req, res) => {
             query.status = { $regex: status, $options: "i" };
         }
         if (dataFilter && dataFilter !== "all") {
-            query.data = { $regex: dataFilter, $options: "i" };
+            if (dataFilter === "register") {
+                query.data = { $in: ["register", "house", "matrimony", "job", "visa"] };
+            }
+            else {
+                query.data = { $regex: dataFilter, $options: "i" };
+            }
         }
         if (search && search !== "") {
             const searchRegex = { $regex: search, $options: "i" };
@@ -218,6 +168,12 @@ const getData = async (req, res) => {
         }
         else if (sortBy === "status") {
             sortObj.status = sortOrder === "desc" ? -1 : 1;
+        }
+        else if (sortBy === "slNo") {
+            sortObj.slNo = sortOrder === "desc" ? -1 : 1;
+        }
+        else if (sortBy === "assignedStaff.staffId") {
+            sortObj["assignedStaff.staffId"] = sortOrder === "desc" ? -1 : 1;
         }
         let data;
         let total;
@@ -426,7 +382,7 @@ const updateRemarks = async (req, res) => {
 exports.updateRemarks = updateRemarks;
 const submitForm = async (req, res) => {
     try {
-        const { name, mobile, whatsapp, preferCountry, preferJobs, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, trackingId, } = req.body;
+        const { name, mobile, whatsapp, preferCountry, preferJobs, job, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, trackingId, } = req.body;
         if (!name || !mobile) {
             return res.status(400).json({
                 success: false,
@@ -489,6 +445,7 @@ const submitForm = async (req, res) => {
             whatsapp,
             preferCountry,
             preferJobs,
+            job,
             searchedHouses,
             gender,
             dateOfBirth,
@@ -503,6 +460,15 @@ const submitForm = async (req, res) => {
             expectations,
             createProfileFor,
             contactPersonName,
+            houseType: req.body.houseType,
+            priceRange: req.body.priceRange,
+            prefferedPlace: req.body.prefferedPlace,
+            caste: req.body.caste,
+            passportNo: req.body.passportNo,
+            aadharId: req.body.aadharId,
+            prefferedSalary: req.body.prefferedSalary,
+            visaType: req.body.visaType,
+            prefferedCourse: req.body.prefferedCourse,
             assignedStaff: assignedStaff,
             isDeleted: false,
         };
@@ -548,7 +514,7 @@ const submitForm = async (req, res) => {
 exports.submitForm = submitForm;
 const updateForm = async (req, res) => {
     try {
-        const { name, mobile, whatsapp, preferCountry, preferJobs, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, step, status, profilePhoto, trackingId, } = req.body;
+        const { name, mobile, whatsapp, preferCountry, preferJobs, job, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, step, status, profilePhoto, trackingId, } = req.body;
         // Validate required fields
         if (!name || !mobile) {
             return res.status(400).json({
@@ -572,7 +538,6 @@ const updateForm = async (req, res) => {
                 message: "Record not found. Please submit the form first.",
             });
         }
-        // Prepare update object with only provided fields
         const updateFields = {};
         if (whatsapp !== undefined)
             updateFields.whatsapp = whatsapp;
@@ -580,6 +545,8 @@ const updateForm = async (req, res) => {
             updateFields.preferCountry = preferCountry;
         if (preferJobs !== undefined)
             updateFields.preferJobs = preferJobs;
+        if (job !== undefined)
+            updateFields.job = job;
         if (searchedHouses !== undefined)
             updateFields.searchedHouses = searchedHouses;
         if (gender !== undefined)
@@ -608,6 +575,24 @@ const updateForm = async (req, res) => {
             updateFields.createProfileFor = createProfileFor;
         if (contactPersonName !== undefined)
             updateFields.contactPersonName = contactPersonName;
+        if (req.body.houseType !== undefined)
+            updateFields.houseType = req.body.houseType;
+        if (req.body.priceRange !== undefined)
+            updateFields.priceRange = req.body.priceRange;
+        if (req.body.prefferedPlace !== undefined)
+            updateFields.prefferedPlace = req.body.prefferedPlace;
+        if (req.body.caste !== undefined)
+            updateFields.caste = req.body.caste;
+        if (req.body.passportNo !== undefined)
+            updateFields.passportNo = req.body.passportNo;
+        if (req.body.aadharId !== undefined)
+            updateFields.aadharId = req.body.aadharId;
+        if (req.body.prefferedSalary !== undefined)
+            updateFields.prefferedSalary = req.body.prefferedSalary;
+        if (req.body.visaType !== undefined)
+            updateFields.visaType = req.body.visaType;
+        if (req.body.prefferedCourse !== undefined)
+            updateFields.prefferedCourse = req.body.prefferedCourse;
         if (status !== undefined)
             updateFields.status = status;
         if (profilePhoto !== undefined)
@@ -832,6 +817,12 @@ const getStaffAssignedData = async (req, res) => {
         }
         else if (sortBy === "status") {
             sortObj.status = sortOrder === "desc" ? -1 : 1;
+        }
+        else if (sortBy === "slNo") {
+            sortObj.slNo = sortOrder === "desc" ? -1 : 1;
+        }
+        else if (sortBy === "assignedStaff.staffId") {
+            sortObj["assignedStaff.staffId"] = sortOrder === "desc" ? -1 : 1;
         }
         let data;
         let total;
@@ -1325,7 +1316,7 @@ exports.updateStaffRow = updateStaffRow;
 const getFormData = async (req, res) => {
     try {
         const { trackingId } = req.query;
-        const form = await FormTracking_1.FormTracking.findOne({ trackingId }, { currentStep: 1, status: 1, dataId: 1 });
+        const form = await FormTracking_1.FormTracking.findOne({ trackingId }, { currentStep: 1, status: 1, dataId: 1, formType: 1 });
         if (!form) {
             return res.status(200).json({
                 success: false,
@@ -1352,4 +1343,35 @@ const getFormData = async (req, res) => {
     }
 };
 exports.getFormData = getFormData;
+const softDeleteData = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: "Data ID is required",
+            });
+        }
+        const data = await Data_1.Data.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Data record not found",
+            });
+        }
+        res.status(200).json({
+            success: true,
+            message: "Data record deleted successfully",
+        });
+    }
+    catch (error) {
+        console.error("Error soft deleting data:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error while deleting data",
+            error: error.message,
+        });
+    }
+};
+exports.softDeleteData = softDeleteData;
 //# sourceMappingURL=data.controller.js.map

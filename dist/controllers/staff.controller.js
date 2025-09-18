@@ -124,7 +124,6 @@ async function updateStaff(req, res) {
         res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });
         return;
     }
-    console.log(req.body);
     const d = parsed.data;
     if (d.email !== undefined || d.username !== undefined) {
         const conflictQuery = { _id: { $ne: id } };
