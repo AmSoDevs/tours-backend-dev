@@ -20,6 +20,7 @@ const envSchema = zod_1.z.object({
     ADMIN_PASSWORD: zod_1.z.string().min(6).default("admin123"),
     JWT_SECRET: zod_1.z.string().min(8).default("dev-secret-key"),
     JWT_EXPIRES_IN: zod_1.z.string().default("1d"),
+    FRONTEND_URLS: zod_1.z.string().default("https://tourcrm.netlify.app,https://google.malayalimarriage.com,http://localhost:3000"),
 });
 const parsed = envSchema.safeParse(process.env);
 if (!parsed.success) {
@@ -41,6 +42,9 @@ exports.config = {
     auth: {
         jwtSecret: parsed.data.JWT_SECRET,
         jwtExpiresIn: parsed.data.JWT_EXPIRES_IN,
+    },
+    cors: {
+        frontendUrls: parsed.data.FRONTEND_URLS.split(',').map(url => url.trim()),
     },
 };
 //# sourceMappingURL=index.js.map
