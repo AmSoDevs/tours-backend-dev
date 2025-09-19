@@ -132,7 +132,6 @@ export async function updateStaff(req: Request, res: Response): Promise<void> {
 		res.status(400).json({ success: false, message: "Invalid payload", errors: parsed.error.flatten() });
 		return;
 	}
-	console.log(req.body);
 	
 	const d = parsed.data as any;
 	
