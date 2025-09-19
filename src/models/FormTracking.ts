@@ -22,7 +22,6 @@ const FormTrackingSchema = new Schema<IFormTracking>(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     formType: {
       type: String,
@@ -66,7 +65,6 @@ const FormTrackingSchema = new Schema<IFormTracking>(
   }
 );
 
-FormTrackingSchema.index({ trackingId: 1 });
 
 export const FormTracking = mongoose.model<IFormTracking>(
   "FormTracking",
