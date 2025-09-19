@@ -41,7 +41,7 @@ const DataSchema = new mongoose_1.Schema({
     dataType: { type: String },
     data: { type: String },
     verified: { type: String },
-    mobile: { type: String, required: true, index: true },
+    mobile: { type: String, required: true },
     name: { type: String },
     remarkFirst: { type: String },
     status: { type: String },

@@ -40,7 +40,6 @@ const FormTrackingSchema = new mongoose_1.Schema({
         type: String,
         required: true,
         unique: true,
-        index: true,
     },
     formType: {
         type: String,
@@ -79,6 +78,5 @@ const FormTrackingSchema = new mongoose_1.Schema({
 }, {
     timestamps: true,
 });
-FormTrackingSchema.index({ trackingId: 1 });
 exports.FormTracking = mongoose_1.default.model("FormTracking", FormTrackingSchema);
 //# sourceMappingURL=FormTracking.js.map
