@@ -644,6 +644,7 @@ export const updateForm = async (req: Request, res: Response) => {
       status,
       profilePhoto,
       trackingId,
+      _id
     } = req.body;
 
     // Validate required fields
@@ -660,17 +661,55 @@ export const updateForm = async (req: Request, res: Response) => {
         message: "Invalid form id",
       });
     }
-    const existingRecord = await Data.findOne({
-      $or: [{ mobile: mobile }, { refferenceNumber: mobile },{data:form?.formType}],
-    });
+    // const existingRecord = await Data.findOne({
+    //   $or: [{ mobile: mobile }, { refferenceNumber: mobile },{data:form?.formType}],
+    // });
+    const existingRecord = await Data.findById(_id);
     if (!existingRecord) {
       return res.status(404).json({
         success: false,
         message: "Record not found. Please submit the form first.",
       });
     }
+     if (mobile !== undefined) {
+       // Check if mobile is same as existing reference number in this record
+       if (
+         existingRecord.refferenceNumber &&
+         mobile === existingRecord.refferenceNumber
+       ) {
+         return res.status(400).json({
+           success: false,
+           message:
+             "Mobile number cannot be the same as the existing reference number in this record.",
+         });
+       }
 
+       // Check for duplicate mobile numbers in OTHER records (same form type only)
+       const duplicateCheckQuery = {
+         _id: { $ne: _id }, // Exclude the current record being updated
+         $and: [
+           {
+             $or: [
+               { mobile: mobile },
+               { refferenceNumber: mobile }
+             ]
+           },
+           { data: form?.formType } // Only check within same form type
+         ]
+       };
+
+       const duplicateRecord = await Data.findOne(duplicateCheckQuery);
+       if (duplicateRecord) {
+         return res.status(400).json({
+           success: false,
+           message:
+             "Mobile number or reference number already exists in another record.",
+         });
+       }
+     }
     const updateFields: any = {};
+    if (name !== undefined) updateFields.name = name;
+    if (mobile !== undefined) updateFields.mobile = mobile;
     if (whatsapp !== undefined) updateFields.whatsapp = whatsapp;
     if (preferCountry !== undefined) updateFields.preferCountry = preferCountry;
     if (preferJobs !== undefined) updateFields.preferJobs = preferJobs;
@@ -706,8 +745,7 @@ export const updateForm = async (req: Request, res: Response) => {
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
 
     // Update the record
-    const updatedRecord = await Data.findByIdAndUpdate(
-      existingRecord._id,
+    const updatedRecord = await Data.findByIdAndUpdate(_id,
       updateFields,
       { new: true, runValidators: true }
     );
@@ -770,6 +808,16 @@ export const updateRow = async (req: Request, res: Response) => {
       spokenLanguage,
       processing,
       visaDate,
+      caste,
+      job,
+      visaType,
+      houseType,
+      typeOfJathakam,
+      star,
+      prefferedPlace,
+      prefferedSalary,
+      prefferedCourse,
+      priceRange
     } = req.body;
 
     if (!id) {
@@ -891,8 +939,18 @@ export const updateRow = async (req: Request, res: Response) => {
       updateFields.spokenLanguage = spokenLanguage;
     if (processing !== undefined) updateFields.processing = processing;
     if (visaDate !== undefined) updateFields.visaDate = visaDate;
-
+    if (caste !== undefined) updateFields.caste = caste;
+    if (job !== undefined) updateFields.job = job;
+    if (visaType !== undefined) updateFields.visaType = visaType;
+    if (houseType !== undefined) updateFields.houseType = houseType;
+    if (typeOfJathakam !== undefined) updateFields.typeOfJathakam = typeOfJathakam;
+    if (star !== undefined) updateFields.star = star;
+    if (prefferedPlace !== undefined) updateFields.prefferedPlace = prefferedPlace;
     // Update the record
+    if (prefferedSalary !== undefined) updateFields.prefferedSalary = prefferedSalary;
+    if (prefferedCourse !== undefined) updateFields.prefferedCourse = prefferedCourse;
+    if (priceRange !== undefined) updateFields.priceRange = priceRange;
+
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
