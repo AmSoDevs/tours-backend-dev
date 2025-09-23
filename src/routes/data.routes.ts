@@ -28,6 +28,7 @@ dataRouter.put("/remarks", updateRemarks);
 dataRouter.put("/row", updateRow);
 
 dataRouter.delete("/:id", softDeleteData);
+dataRouter.post("/bulk-delete", softDeleteData);
 
 dataRouter.get("/staff-assignment/status", getStaffAssignmentStatus);
 dataRouter.post("/staff-assignment/reset", resetStaffAssignment);

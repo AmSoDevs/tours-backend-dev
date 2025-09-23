@@ -54,7 +54,6 @@ const importData = async (req, res) => {
         for (const batch of batches) {
             for (let index = 0; index < batch.length; index++) {
                 const record = batch[index];
-                console.log(record, "record");
                 try {
                     // Build duplicate check query with proper null handling
                     const duplicateQuery = [];
@@ -69,7 +68,6 @@ const importData = async (req, res) => {
                     const existingRecord = duplicateQuery.length > 0
                         ? await Data_1.Data.findOne({ $or: duplicateQuery })
                         : null;
-                    console.log(existingRecord, "existingRecord");
                     if (existingRecord) {
                         results.duplicateRecords++;
                         continue;
@@ -397,10 +395,12 @@ const submitForm = async (req, res) => {
             });
         }
         const existingRecord = await Data_1.Data.findOne({
-            $or: [
-                { mobile: mobile },
-                { refferenceNumber: mobile },
-            ], data: form?.formType
+            $and: [
+                {
+                    $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+                },
+                { data: form?.formType },
+            ],
         });
         if (existingRecord && form?.status === "shared") {
             return res.status(400).json({
@@ -416,12 +416,10 @@ const submitForm = async (req, res) => {
         }
         let assignedStaff;
         let staffAssignment;
-        // Check if form already has a staff assigned
         if (form?.staffId) {
             assignedStaff = form.staffId;
         }
         else {
-            // Assign staff using fair rotation system
             const staffMembers = await Staff_1.Staff.find({
                 isDeleted: false,
                 isActive: true,
@@ -432,7 +430,6 @@ const submitForm = async (req, res) => {
                     message: "No staff members available for data assignment.",
                 });
             }
-            // Use the single record staff assignment helper function
             const { assignedStaffId, staffAssignment: updatedStaffAssignment } = await (0, helper_1.assignStaffForSingleRecord)(staffMembers);
             assignedStaff = assignedStaffId;
             staffAssignment = updatedStaffAssignment;
@@ -473,7 +470,10 @@ const submitForm = async (req, res) => {
             isDeleted: false,
         };
         if (form?.dataId) {
-            newData = await Data_1.Data.findByIdAndUpdate(form?.dataId, updateData, { new: true, runValidators: true });
+            newData = await Data_1.Data.findByIdAndUpdate(form?.dataId, updateData, {
+                new: true,
+                runValidators: true,
+            });
         }
         else {
             const slNo = await (0, helper_1.generateUniqueSlNo)();
@@ -514,7 +514,7 @@ const submitForm = async (req, res) => {
 exports.submitForm = submitForm;
 const updateForm = async (req, res) => {
     try {
-        const { name, mobile, whatsapp, preferCountry, preferJobs, job, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, step, status, profilePhoto, trackingId, } = req.body;
+        const { name, mobile, whatsapp, preferCountry, preferJobs, job, searchedHouses, gender, dateOfBirth, maritalStatus, religion, education, jobType, monthlyIncome, spokenLanguage, district, city, expectations, createProfileFor, contactPersonName, step, status, profilePhoto, trackingId, _id, } = req.body;
         // Validate required fields
         if (!name || !mobile) {
             return res.status(400).json({
@@ -529,16 +529,48 @@ const updateForm = async (req, res) => {
                 message: "Invalid form id",
             });
         }
-        const existingRecord = await Data_1.Data.findOne({
-            $or: [{ mobile: mobile }, { refferenceNumber: mobile }, { data: form?.formType }],
-        });
+        // const existingRecord = await Data.findOne({
+        //   $or: [{ mobile: mobile }, { refferenceNumber: mobile },{data:form?.formType}],
+        // });
+        const existingRecord = await Data_1.Data.findById(_id);
         if (!existingRecord) {
             return res.status(404).json({
                 success: false,
                 message: "Record not found. Please submit the form first.",
             });
         }
+        if (mobile !== undefined && mobile !== "") {
+            // Check if mobile is same as existing reference number in this record
+            if (existingRecord.refferenceNumber &&
+                mobile === existingRecord.refferenceNumber) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mobile number cannot be the same as the existing reference number in this record.",
+                });
+            }
+            // Check for duplicate mobile numbers in OTHER records (same form type only)
+            const duplicateCheckQuery = {
+                _id: { $ne: _id }, // Exclude the current record being updated
+                $and: [
+                    {
+                        $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+                    },
+                    { data: form?.formType }, // Only check within same form type
+                ],
+            };
+            const duplicateRecord = await Data_1.Data.findOne(duplicateCheckQuery);
+            if (duplicateRecord) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Mobile number or reference number already exists in another record.",
+                });
+            }
+        }
         const updateFields = {};
+        if (name !== undefined)
+            updateFields.name = name;
+        if (mobile !== undefined)
+            updateFields.mobile = mobile;
         if (whatsapp !== undefined)
             updateFields.whatsapp = whatsapp;
         if (preferCountry !== undefined)
@@ -598,7 +630,10 @@ const updateForm = async (req, res) => {
         if (profilePhoto !== undefined)
             updateFields.profilePhoto = profilePhoto;
         // Update the record
-        const updatedRecord = await Data_1.Data.findByIdAndUpdate(existingRecord._id, updateFields, { new: true, runValidators: true });
+        const updatedRecord = await Data_1.Data.findByIdAndUpdate(_id, updateFields, {
+            new: true,
+            runValidators: true,
+        });
         // Update FormTracking currentStep and status
         if (step !== undefined) {
             form.currentStep = step;
@@ -625,7 +660,7 @@ const updateForm = async (req, res) => {
 exports.updateForm = updateForm;
 const updateRow = async (req, res) => {
     try {
-        const { id, mobile, name, status, remarkFirst, remarkSecond, verified, dataType, refferenceNumber, refferenceName, regPayment, visaPay, contactPersonName, regReceived, payReceived, regBalance, payBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, visaDate, } = req.body;
+        const { id, mobile, name, status, remarkFirst, remarkSecond, verified, dataType, refferenceNumber, refferenceName, regPayment, serPayment, contactPersonName, regReceived, serReceived, regBalance, serBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, serDate, caste, job, visaType, houseType, typeOfJathakam, star, prefferedPlace, prefferedSalary, prefferedCourse, priceRange, dateOfBirth, } = req.body;
         if (!id) {
             return res.status(400).json({
                 success: false,
@@ -668,18 +703,20 @@ const updateRow = async (req, res) => {
                 _id: { $ne: id }, // Exclude the current record being updated
                 $or: [],
             };
-            if (mobile !== undefined) {
+            if (mobile !== undefined && mobile !== "") {
                 duplicateCheckQuery.$or.push({ mobile: mobile }, { refferenceNumber: mobile });
             }
-            if (refferenceNumber !== undefined) {
+            if (refferenceNumber !== undefined && refferenceNumber !== "") {
                 duplicateCheckQuery.$or.push({ mobile: refferenceNumber }, { refferenceNumber: refferenceNumber });
             }
-            const duplicateRecord = await Data_1.Data.findOne(duplicateCheckQuery);
-            if (duplicateRecord) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Mobile number or reference number already exists in another record.",
-                });
+            if (duplicateCheckQuery.$or.length > 0) {
+                const duplicateRecord = await Data_1.Data.findOne(duplicateCheckQuery);
+                if (duplicateRecord) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Mobile number or reference number already exists in another record.",
+                    });
+                }
             }
         }
         const updateFields = {};
@@ -697,24 +734,26 @@ const updateRow = async (req, res) => {
             updateFields.verified = verified;
         if (dataType !== undefined)
             updateFields.dataType = dataType;
+        if (dateOfBirth !== undefined)
+            updateFields.dateOfBirth = dateOfBirth;
         if (refferenceNumber !== undefined)
             updateFields.refferenceNumber = refferenceNumber;
         if (refferenceName !== undefined)
             updateFields.refferenceName = refferenceName;
         if (regPayment !== undefined)
             updateFields.regPayment = regPayment;
-        if (visaPay !== undefined)
-            updateFields.visaPay = visaPay;
+        if (serPayment !== undefined)
+            updateFields.serPayment = serPayment;
         if (contactPersonName !== undefined)
             updateFields.contactPersonName = contactPersonName;
         if (regReceived !== undefined)
             updateFields.regReceived = regReceived;
-        if (payReceived !== undefined)
-            updateFields.payReceived = payReceived;
+        if (serReceived !== undefined)
+            updateFields.serReceived = serReceived;
         if (regBalance !== undefined)
             updateFields.regBalance = regBalance;
-        if (payBalance !== undefined)
-            updateFields.payBalance = payBalance;
+        if (serBalance !== undefined)
+            updateFields.serBalance = serBalance;
         if (passportNo !== undefined)
             updateFields.passportNo = passportNo;
         if (vSampleSend !== undefined)
@@ -745,9 +784,29 @@ const updateRow = async (req, res) => {
             updateFields.spokenLanguage = spokenLanguage;
         if (processing !== undefined)
             updateFields.processing = processing;
-        if (visaDate !== undefined)
-            updateFields.visaDate = visaDate;
+        if (serDate !== undefined)
+            updateFields.serDate = serDate;
+        if (caste !== undefined)
+            updateFields.caste = caste;
+        if (job !== undefined)
+            updateFields.job = job;
+        if (visaType !== undefined)
+            updateFields.visaType = visaType;
+        if (houseType !== undefined)
+            updateFields.houseType = houseType;
+        if (typeOfJathakam !== undefined)
+            updateFields.typeOfJathakam = typeOfJathakam;
+        if (star !== undefined)
+            updateFields.star = star;
+        if (prefferedPlace !== undefined)
+            updateFields.prefferedPlace = prefferedPlace;
         // Update the record
+        if (prefferedSalary !== undefined)
+            updateFields.prefferedSalary = prefferedSalary;
+        if (prefferedCourse !== undefined)
+            updateFields.prefferedCourse = prefferedCourse;
+        if (priceRange !== undefined)
+            updateFields.priceRange = priceRange;
         const updatedRecord = await Data_1.Data.findByIdAndUpdate(id, updateFields, {
             new: true,
             runValidators: true,
@@ -1127,7 +1186,7 @@ const getStaffAssignmentStatus = async (req, res) => {
         // Find the index of the last assigned staff in the current active staff array
         let lastAssignedStaffIndex = -1;
         if (staffAssignment.lastAssignedStaffId) {
-            lastAssignedStaffIndex = staffMembers.findIndex(staff => staff._id.toString() === staffAssignment.lastAssignedStaffId);
+            lastAssignedStaffIndex = staffMembers.findIndex((staff) => staff._id.toString() === staffAssignment.lastAssignedStaffId);
         }
         const nextStaffIndex = (lastAssignedStaffIndex + 1) % staffMembers.length;
         const nextStaff = staffMembers[nextStaffIndex];
@@ -1163,7 +1222,7 @@ const updateStaffRow = async (req, res) => {
         const { id: staffId } = req.params;
         const { id, mobile, name, status, remarkFirst, remarkSecond, verified, dataType, refferenceNumber, refferenceName, 
         // Register specific fields
-        regPayment, visaPay, contactPersonName, regReceived, payReceived, regBalance, payBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, visaDate, } = req.body;
+        regPayment, serPayment, contactPersonName, regReceived, serReceived, regBalance, serBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, serDate, } = req.body;
         if (!id) {
             return res.status(400).json({
                 success: false,
@@ -1248,18 +1307,18 @@ const updateStaffRow = async (req, res) => {
         // Register specific fields
         if (regPayment !== undefined)
             updateFields.regPayment = regPayment;
-        if (visaPay !== undefined)
-            updateFields.visaPay = visaPay;
+        if (serPayment !== undefined)
+            updateFields.serPayment = serPayment;
         if (contactPersonName !== undefined)
             updateFields.contactPersonName = contactPersonName;
         if (regReceived !== undefined)
             updateFields.regReceived = regReceived;
-        if (payReceived !== undefined)
-            updateFields.payReceived = payReceived;
+        if (serReceived !== undefined)
+            updateFields.serReceived = serReceived;
         if (regBalance !== undefined)
             updateFields.regBalance = regBalance;
-        if (payBalance !== undefined)
-            updateFields.payBalance = payBalance;
+        if (serBalance !== undefined)
+            updateFields.serBalance = serBalance;
         if (passportNo !== undefined)
             updateFields.passportNo = passportNo;
         if (vSampleSend !== undefined)
@@ -1290,8 +1349,8 @@ const updateStaffRow = async (req, res) => {
             updateFields.spokenLanguage = spokenLanguage;
         if (processing !== undefined)
             updateFields.processing = processing;
-        if (visaDate !== undefined)
-            updateFields.visaDate = visaDate;
+        if (serDate !== undefined)
+            updateFields.serDate = serDate;
         // Update the record
         const updatedRecord = await Data_1.Data.findByIdAndUpdate(id, updateFields, {
             new: true,
@@ -1346,22 +1405,26 @@ exports.getFormData = getFormData;
 const softDeleteData = async (req, res) => {
     try {
         const { id } = req.params;
-        if (!id) {
+        const { ids } = req.body;
+        // Check if we have IDs from body (array) or params (single)
+        const idsToDelete = ids && Array.isArray(ids) ? ids : [id];
+        if (!idsToDelete.length || idsToDelete.every((id) => !id)) {
             return res.status(400).json({
                 success: false,
-                message: "Data ID is required",
+                message: "Data ID(s) are required",
             });
         }
-        const data = await Data_1.Data.findByIdAndUpdate(id, { isDeleted: true }, { new: true });
-        if (!data) {
+        // Soft delete multiple records
+        const result = await Data_1.Data.updateMany({ _id: { $in: idsToDelete } }, { isDeleted: true });
+        if (result.matchedCount === 0) {
             return res.status(404).json({
                 success: false,
-                message: "Data record not found",
+                message: "No data records found",
             });
         }
         res.status(200).json({
             success: true,
-            message: "Data record deleted successfully",
+            message: `${result.modifiedCount} data record(s) deleted successfully`,
         });
     }
     catch (error) {
