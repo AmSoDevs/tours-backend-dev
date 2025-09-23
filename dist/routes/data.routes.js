@@ -20,6 +20,7 @@ exports.dataRouter.put("/whatsapp-click", data_controller_1.updateWhatsappClickT
 exports.dataRouter.put("/remarks", data_controller_1.updateRemarks);
 exports.dataRouter.put("/row", data_controller_1.updateRow);
 exports.dataRouter.delete("/:id", data_controller_1.softDeleteData);
+exports.dataRouter.post("/bulk-delete", data_controller_1.softDeleteData);
 exports.dataRouter.get("/staff-assignment/status", data_controller_1.getStaffAssignmentStatus);
 exports.dataRouter.post("/staff-assignment/reset", data_controller_1.resetStaffAssignment);
 //# sourceMappingURL=data.routes.js.map
