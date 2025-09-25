@@ -20,10 +20,6 @@ const upload = multer({
 
 export const uploadImage = async (req: Request, res: Response) => {
   try {
-    console.log('req.file', req.file);
-    console.log('DO_SPACES_ACCESS_KEY:', config.spaces.accessKey );
-    console.log('DO_SPACES_SECRET_KEY:', config.spaces.secretKey );
-    console.log('DO_SPACES_BUCKET:',config.spaces.bucket );
     
     if (!req.file) {
       return res.status(400).json({
