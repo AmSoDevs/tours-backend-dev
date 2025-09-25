@@ -42,20 +42,22 @@ export interface DataDocument extends Document {
   priceRange?: string;
   prefferedPlace?: string;
   caste?: string;
+  typeOfJathakam?: string;
+  star?: string;
   prefferedSalary?: string;
   visaType?: string;
   prefferedCourse?: string;
   regPayment?: string;
-  visaPay?: string;
+  serPayment?: string;
   regReceived?: string;
-  payReceived?: string;
+  serReceived?: string;
   regBalance?: string;
-  payBalance?: string;
+  serBalance?: string;
   passportNo?: string;
   aadharId?: string;
   vSampleSend?: string;
   processing?: string;
-  visaDate?: string;
+  serDate?: string;
   step?: number;
   profilePhoto?: string;
   whatsapp?: string;
@@ -68,7 +70,7 @@ const DataSchema = new Schema<DataDocument>(
     dataType: { type: String},
     data: { type: String },
     verified: { type: String },
-    mobile: { type: String, required: true, index: true },
+    mobile: { type: String, required: true },
     name: { type: String },
     remarkFirst: { type: String },
     status: { type: String },
@@ -112,16 +114,16 @@ const DataSchema = new Schema<DataDocument>(
     visaType: { type: String },
     prefferedCourse: { type: String },
     regPayment: { type: String },
-    visaPay: { type: String },
+    serPayment: { type: String },
     regReceived: { type: String },
-    payReceived: { type: String },
+    serReceived: { type: String },
     regBalance: { type: String },
-    payBalance: { type: String },
+    serBalance: { type: String },
     passportNo: { type: String },
     aadharId: { type: String },
     vSampleSend: { type: String },
     processing: { type: String },
-    visaDate: { type: String },
+    serDate: { type: String },
     profilePhoto: { type: String },
   },
   { timestamps: true }
