@@ -473,6 +473,7 @@ export const submitForm = async (req: Request, res: Response) => {
       createProfileFor,
       contactPersonName,
       trackingId,
+      
     } = req.body;
 
     if (!name || !mobile) {
@@ -820,6 +821,7 @@ export const updateRow = async (req: Request, res: Response) => {
       prefferedCourse,
       priceRange,
       dateOfBirth,
+      profilePhoto,
     } = req.body;
 
     if (!id) {
@@ -959,6 +961,7 @@ export const updateRow = async (req: Request, res: Response) => {
     if (prefferedCourse !== undefined)
       updateFields.prefferedCourse = prefferedCourse;
     if (priceRange !== undefined) updateFields.priceRange = priceRange;
+    if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
 
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
@@ -1465,6 +1468,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       spokenLanguage,
       processing,
       serDate,
+      profilePhoto,
     } = req.body;
 
     if (!id) {
@@ -1594,6 +1598,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       updateFields.spokenLanguage = spokenLanguage;
     if (processing !== undefined) updateFields.processing = processing;
     if (serDate !== undefined) updateFields.serDate = serDate;
+    if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
 
     // Update the record
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
