@@ -8,9 +8,6 @@ const aws_sdk_1 = __importDefault(require("aws-sdk"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const _1 = require(".");
 dotenv_1.default.config();
-console.log('DO_SPACES_ACCESS_KEY:', _1.config.spaces.accessKey);
-console.log('DO_SPACES_SECRET_KEY:', _1.config.spaces.secretKey);
-console.log('DO_SPACES_BUCKET:', _1.config.spaces.bucket);
 const spacesEndpoint = new aws_sdk_1.default.Endpoint('blr1.digitaloceanspaces.com');
 const s3 = new aws_sdk_1.default.S3({
     endpoint: spacesEndpoint,

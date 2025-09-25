@@ -39,7 +39,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.uploadSingle = exports.deleteImage = exports.uploadImage = void 0;
 const multer_1 = __importDefault(require("multer"));
 const spaces_1 = require("../config/spaces");
-const config_1 = require("../config");
 const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({
     storage: storage,
@@ -57,10 +56,6 @@ const upload = (0, multer_1.default)({
 });
 const uploadImage = async (req, res) => {
     try {
-        console.log('req.file', req.file);
-        console.log('DO_SPACES_ACCESS_KEY:', config_1.config.spaces.accessKey);
-        console.log('DO_SPACES_SECRET_KEY:', config_1.config.spaces.secretKey);
-        console.log('DO_SPACES_BUCKET:', config_1.config.spaces.bucket);
         if (!req.file) {
             return res.status(400).json({
                 success: false,

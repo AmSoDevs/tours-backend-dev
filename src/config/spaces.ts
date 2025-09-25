@@ -3,9 +3,6 @@ import dotenv from 'dotenv';
 import { config } from '.';
 
 dotenv.config();
-console.log('DO_SPACES_ACCESS_KEY:', config.spaces.accessKey );
-console.log('DO_SPACES_SECRET_KEY:', config.spaces.secretKey );
-console.log('DO_SPACES_BUCKET:',config.spaces.bucket );
 
 const spacesEndpoint = new AWS.Endpoint('blr1.digitaloceanspaces.com');
 const s3 = new AWS.S3({
