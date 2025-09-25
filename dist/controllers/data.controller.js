@@ -660,7 +660,7 @@ const updateForm = async (req, res) => {
 exports.updateForm = updateForm;
 const updateRow = async (req, res) => {
     try {
-        const { id, mobile, name, status, remarkFirst, remarkSecond, verified, dataType, refferenceNumber, refferenceName, regPayment, serPayment, contactPersonName, regReceived, serReceived, regBalance, serBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, serDate, caste, job, visaType, houseType, typeOfJathakam, star, prefferedPlace, prefferedSalary, prefferedCourse, priceRange, dateOfBirth, } = req.body;
+        const { id, mobile, name, status, remarkFirst, remarkSecond, verified, dataType, refferenceNumber, refferenceName, regPayment, serPayment, contactPersonName, regReceived, serReceived, regBalance, serBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, serDate, caste, job, visaType, houseType, typeOfJathakam, star, prefferedPlace, prefferedSalary, prefferedCourse, priceRange, dateOfBirth, profilePhoto, } = req.body;
         if (!id) {
             return res.status(400).json({
                 success: false,
@@ -807,6 +807,8 @@ const updateRow = async (req, res) => {
             updateFields.prefferedCourse = prefferedCourse;
         if (priceRange !== undefined)
             updateFields.priceRange = priceRange;
+        if (profilePhoto !== undefined)
+            updateFields.profilePhoto = profilePhoto;
         const updatedRecord = await Data_1.Data.findByIdAndUpdate(id, updateFields, {
             new: true,
             runValidators: true,
@@ -1222,7 +1224,7 @@ const updateStaffRow = async (req, res) => {
         const { id: staffId } = req.params;
         const { id, mobile, name, status, remarkFirst, remarkSecond, verified, dataType, refferenceNumber, refferenceName, 
         // Register specific fields
-        regPayment, serPayment, contactPersonName, regReceived, serReceived, regBalance, serBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, serDate, } = req.body;
+        regPayment, serPayment, contactPersonName, regReceived, serReceived, regBalance, serBalance, passportNo, vSampleSend, expectations, district, education, preferCountry, city, jobType, preferJobs, religion, monthlyIncome, searchedHouses, maritalStatus, spokenLanguage, processing, serDate, profilePhoto, } = req.body;
         if (!id) {
             return res.status(400).json({
                 success: false,
@@ -1351,6 +1353,8 @@ const updateStaffRow = async (req, res) => {
             updateFields.processing = processing;
         if (serDate !== undefined)
             updateFields.serDate = serDate;
+        if (profilePhoto !== undefined)
+            updateFields.profilePhoto = profilePhoto;
         // Update the record
         const updatedRecord = await Data_1.Data.findByIdAndUpdate(id, updateFields, {
             new: true,
