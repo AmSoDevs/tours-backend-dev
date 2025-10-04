@@ -7,6 +7,8 @@ const trackFormShareSchema = z.object({
   formType: z.string().min(1),
   staffId: z.string().min(1),
   dataId: z.string().optional(),
+  isReference: z.boolean().optional(),
+  allowMultiple: z.boolean().optional(),
  
 });
 
@@ -26,13 +28,11 @@ export async function trackFormShare(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { formType, staffId, dataId } = parsed.data;
+    const { formType, staffId, dataId, isReference, allowMultiple } = parsed.data;
 
     // Check if tracking ID already exists
-    const existing = await FormTracking.findOne({ dataId, staffId,formType });
+    const existing = await FormTracking.findOne({ dataId, staffId, formType,isReference, allowMultiple });
     if (existing) {
-      
-      
        res.status(201).json({
         success: true,
         message: "Form share tracked successfully",
@@ -46,6 +46,8 @@ const trackingId= await generateUniqueTrackingId();
       formType,
       staffId,
       dataId,
+      isReference,
+      allowMultiple,
       status: "shared",
       sharedAt: new Date(),
       currentStep: 0,

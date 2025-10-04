@@ -157,9 +157,11 @@ export const getData = async (req: Request, res: Response) => {
       search,
       sortBy = "createdAt",
       sortOrder = "desc",
+      showDeletedOnly=false,
     } = req.query;
 
-    const query: any = { isDeleted: false };
+    const query: any = { isDeleted: Boolean(showDeletedOnly) };
+    console.log("🚀 ~ getData ~ query:", query)
 
     if (dataType && dataType !== "all") {
       query.dataType = { $regex: dataType, $options: "i" };
@@ -495,7 +497,7 @@ export const submitForm = async (req: Request, res: Response) => {
         {
           $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
         },
-        { data: form?.formType },
+        { data: form?.formType, },
       ],
     });
 
@@ -504,12 +506,13 @@ export const submitForm = async (req: Request, res: Response) => {
         success: false,
         message: "Mobile number already exists.",
       });
-    } else if (!existingRecord && form?.status === "in_progress") {
-      return res.status(400).json({
-        success: false,
-        message: "Record not found. Please submit the form first.",
-      });
     }
+    //  else if (!existingRecord && form?.status === "in_progress") {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Record not found. Please submit the form first.",
+    //   });
+    // }
     let assignedStaff: any;
     let staffAssignment: any;
 
@@ -1627,7 +1630,7 @@ export const getFormData = async (req: Request, res: Response) => {
 
     const form = await FormTracking.findOne(
       { trackingId },
-      { currentStep: 1, status: 1, dataId: 1, formType: 1 }
+      { currentStep: 1, status: 1, dataId: 1, formType: 1, isReference: 1, allowMultiple: 1 }
     );
     if (!form) {
       return res.status(200).json({
