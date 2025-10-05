@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authenticate, requireAdmin } from "../middleware/auth";
 import { createStaff, getStaff, listStaff, softDeleteStaff, updateStaff } from "../controllers/staff.controller";
-import { staffLogin } from "../controllers/auth.controller";
+import { staffLogin } from "../controllers/auth/auth.controller";
 
 export const staffRouter = Router();
 

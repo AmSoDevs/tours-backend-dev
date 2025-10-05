@@ -21,6 +21,8 @@ export interface StaffDocument extends Document {
 	isDeleted: boolean;
 	isActive: boolean;
 	comparePassword(plain: string): Promise<boolean>;
+	files: Types.ObjectId[];
+	profilePhoto?: string;
 }
 
 const StaffSchema = new Schema<StaffDocument>(
@@ -40,6 +42,8 @@ const StaffSchema = new Schema<StaffDocument>(
 		password: { type: String, required: true },
 		isActive: { type: Boolean, default: true},
 		isDeleted: { type: Boolean, default: false, index: true },
+		files: [{ type: Schema.Types.ObjectId, ref: "Files" }],
+		profilePhoto: { type: String, required: false },
 	},
 	{ timestamps: true }
 );

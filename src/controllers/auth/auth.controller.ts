@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
 import jwt, { Secret, SignOptions } from "jsonwebtoken";
 import { z } from "zod";
-import { config } from "../config";
-import { Admin } from "../models/Admin";
-import { Staff } from "../models/Staff";
+import { config } from "../../config";
+import { Admin } from "../../models/Admin";
+import { Staff } from "../../models/Staff";
 
 const loginSchema = z.object({
 	email: z.string().email(),
