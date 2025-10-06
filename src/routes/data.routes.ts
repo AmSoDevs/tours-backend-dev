@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { importData, getData, updateDataStatus, updateCallClickTime, updateWhatsappClickTime, updateRemarks, submitForm, updateRow, getStaffAssignedData, updateStaffDataStatus, updateStaffCallClickTime, updateStaffWhatsappClickTime, updateStaffRemarks, updateStaffRow, resetStaffAssignment, getStaffAssignmentStatus, softDeleteData } from "../controllers/data.controller";
+import { importData, getData, updateDataStatus, updateCallClickTime, updateWhatsappClickTime, updateRemarks, submitForm, updateRow, getStaffAssignedData, updateStaffDataStatus, updateStaffCallClickTime, updateStaffWhatsappClickTime, updateStaffRemarks, updateStaffRow, resetStaffAssignment, getStaffAssignmentStatus, softDeleteData } from "../controllers/data/data.controller";
 import { authenticate, requireAdmin, requireStaff } from "../middleware/auth";
 
 export const dataRouter = Router();

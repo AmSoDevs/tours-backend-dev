@@ -13,6 +13,8 @@ export interface IFormTracking extends Document {
   currentStep: number;
   createdAt: Date;
   updatedAt: Date;
+  isReference?: boolean;
+  allowMultiple?: boolean;
 }
 
 
@@ -58,6 +60,16 @@ const FormTrackingSchema = new Schema<IFormTracking>(
     currentStep: {
       type: Number,
       default: 0,
+    },
+    isReference: {
+      type: Boolean,
+      default: false,
+      required: false,
+    },
+    allowMultiple: {
+      type: Boolean,
+      default: false,
+      required: false,
     },
   },
   {

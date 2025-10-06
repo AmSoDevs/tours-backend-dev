@@ -3,7 +3,7 @@ import {
   submitForm,
   updateForm,
   getFormData,
-} from "../controllers/data.controller";
+} from "../controllers/data/data.controller";
 
 export const publicRouter = Router();
 

@@ -48,9 +48,13 @@ export interface DataDocument extends Document {
   visaType?: string;
   prefferedCourse?: string;
   regPayment?: string;
+  regPaymentUpdatedAt?: Date;
   serPayment?: string;
+  serPaymentUpdatedAt?: Date;
   regReceived?: string;
+  regReceivedUpdatedAt?: Date;
   serReceived?: string;
+  serReceivedUpdatedAt?: Date;
   regBalance?: string;
   serBalance?: string;
   passportNo?: string;
@@ -61,6 +65,7 @@ export interface DataDocument extends Document {
   step?: number;
   profilePhoto?: string;
   whatsapp?: string;
+  files?: Types.ObjectId[];
 }
 
 const DataSchema = new Schema<DataDocument>(
@@ -113,10 +118,19 @@ const DataSchema = new Schema<DataDocument>(
     prefferedSalary: { type: String },
     visaType: { type: String },
     prefferedCourse: { type: String },
+
     regPayment: { type: String },
+    regPaymentUpdatedAt: { type: Date },
+
     serPayment: { type: String },
+    serPaymentUpdatedAt: { type: Date },
+
     regReceived: { type: String },
+    regReceivedUpdatedAt: { type: Date },
+
     serReceived: { type: String },
+    serReceivedUpdatedAt: { type: Date },
+
     regBalance: { type: String },
     serBalance: { type: String },
     passportNo: { type: String },
@@ -125,6 +139,8 @@ const DataSchema = new Schema<DataDocument>(
     processing: { type: String },
     serDate: { type: String },
     profilePhoto: { type: String },
+    files: [{ type: Schema.Types.ObjectId, ref: "Files" }],
+
   },
   { timestamps: true }
 );

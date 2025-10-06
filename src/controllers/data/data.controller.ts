@@ -1,15 +1,16 @@
 import { Request, Response } from "express";
-import { Data } from "../models/Data";
-import { Staff } from "../models/Staff";
-import { StaffAssignment } from "../models/StaffAssignment";
+import { Data } from "../../models/Data";
+import { Staff } from "../../models/Staff";
+import { StaffAssignment } from "../../models/StaffAssignment";
 import {
   generateUniqueProfileId,
   generateUniqueSlNo,
   resetStaffAssignmentIfNeeded,
   assignStaffForSingleRecord,
   assignStaffWithRotation,
-} from "../utils/helper";
-import { FormTracking } from "../models/FormTracking";
+} from "../../utils/helper";
+import { FormTracking } from "../../models/FormTracking";
+import { dataControllerHooks } from "./data.controller.hooks";
 
 export const importData = async (req: Request, res: Response) => {
   try {
@@ -157,9 +158,27 @@ export const getData = async (req: Request, res: Response) => {
       search,
       sortBy = "createdAt",
       sortOrder = "desc",
+      showDeletedOnly = false,
+      showWithRemindersOnly = false,
+      
     } = req.query;
 
-    const query: any = { isDeleted: false };
+    const query: any = {}
+
+
+    if (showDeletedOnly === "true") {
+      query.isDeleted = true;
+    }
+    else {
+      query.isDeleted = false;
+    }
+
+    if(showWithRemindersOnly==="true"){
+      query.reminderDateAndTime = { $ne: null };
+
+    }
+
+
 
     if (dataType && dataType !== "all") {
       query.dataType = { $regex: dataType, $options: "i" };
@@ -214,11 +233,12 @@ export const getData = async (req: Request, res: Response) => {
     let data;
     let total;
     let pagination;
-
     if (limit) {
       const skip = (Number(page) - 1) * Number(limit);
       data = await Data.find(query)
+
         .populate("assignedStaff", "name staffId")
+        .populate("files")
         .sort(sortObj)
         .skip(skip)
         .limit(Number(limit));
@@ -233,6 +253,7 @@ export const getData = async (req: Request, res: Response) => {
     } else {
       data = await Data.find(query)
         .populate("assignedStaff", "name staffId")
+        .populate("files")
         .sort(sortObj);
 
       total = data.length;
@@ -277,34 +298,73 @@ export const updateDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    const updateData: any = {
+    const recordsWithReminders = await Data.find({ 
+      _id: { $in: ids }, 
+      reminderDateAndTime: { $ne: null } 
+    });
+
+    const recordWithoutReminders = await Data.find({ 
+      _id: { $in: ids }, 
+      $or: [
+        { reminderDateAndTime: { $eq: null } },
+        { reminderDateAndTime: { $exists: false } }
+      ]
+    });
+
+
+    const updateDataWithReminders: any = {
       status: status,
+      reminderDateAndTime:""
     };
 
-    if (reminderDateAndTime) {
-      updateData.reminderDateAndTime = new Date(reminderDateAndTime);
+    const updateDataWithoutReminders: any = {
+      status: status,
+      reminderDateAndTime : new Date(reminderDateAndTime) 
+    };
+
+    if(recordsWithReminders?.length){
+
+      const ids = recordsWithReminders.map((record) => record._id);
+      const updateResult = await Data.updateMany(
+        {
+          _id: { $in: ids },
+        },
+        {
+          $set: updateDataWithReminders,
+        }
+      );
+
     }
 
-    const updateResult = await Data.updateMany(
-      {
-        _id: { $in: ids },
-      },
-      {
-        $set: updateData,
-      }
-    );
+    if(recordWithoutReminders?.length){
 
-    if (updateResult.modifiedCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No records found to update.",
-      });
+      const ids = recordWithoutReminders.map((record) => record._id);
+      const updateResult = await Data.updateMany(
+        {
+          _id: { $in: ids },
+        },
+        {
+          $set: updateDataWithoutReminders,
+        }
+      );
+
     }
+
+   
+
+   
+
+    // if (updateResult.modifiedCount === 0) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     message: "No records found to update.",
+    //   });
+    // }
 
     return res.status(200).json({
       success: true,
-      message: `Successfully updated ${updateResult.modifiedCount} record(s)`,
-      updatedCount: updateResult.modifiedCount,
+      message: `Successfully updated  record(s)`,
+      updatedCount: 0,
     });
   } catch (error: any) {
     console.error("Error updating data status:", error);
@@ -473,7 +533,7 @@ export const submitForm = async (req: Request, res: Response) => {
       createProfileFor,
       contactPersonName,
       trackingId,
-      
+
     } = req.body;
 
     if (!name || !mobile) {
@@ -495,7 +555,7 @@ export const submitForm = async (req: Request, res: Response) => {
         {
           $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
         },
-        { data: form?.formType },
+        { data: form?.formType, },
       ],
     });
 
@@ -504,12 +564,13 @@ export const submitForm = async (req: Request, res: Response) => {
         success: false,
         message: "Mobile number already exists.",
       });
-    } else if (!existingRecord && form?.status === "in_progress") {
-      return res.status(400).json({
-        success: false,
-        message: "Record not found. Please submit the form first.",
-      });
     }
+    //  else if (!existingRecord && form?.status === "in_progress") {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Record not found. Please submit the form first.",
+    //   });
+    // }
     let assignedStaff: any;
     let staffAssignment: any;
 
@@ -534,7 +595,7 @@ export const submitForm = async (req: Request, res: Response) => {
       staffAssignment = updatedStaffAssignment;
     }
     let newData;
-    let updateData = {
+    let updateData:any = {
       data: form?.formType,
       mobile,
       name,
@@ -569,13 +630,20 @@ export const submitForm = async (req: Request, res: Response) => {
       isDeleted: false,
     };
     if (form?.dataId) {
+
+      if(existingRecord?.data==="bulk" ||!existingRecord?.data ){
+        updateData.profileId = await dataControllerHooks.createRegistrationUniqueSerialNumber(form?.formType);
+      }
+     
       newData = await Data.findByIdAndUpdate(form?.dataId, updateData, {
         new: true,
         runValidators: true,
       });
     } else {
+
+
       const slNo = await generateUniqueSlNo();
-      const profileId = await generateUniqueProfileId();
+      const profileId = await dataControllerHooks.createRegistrationUniqueSerialNumber(form?.formType);
 
       newData = new Data({
         ...updateData,
@@ -661,46 +729,48 @@ export const updateForm = async (req: Request, res: Response) => {
     // const existingRecord = await Data.findOne({
     //   $or: [{ mobile: mobile }, { refferenceNumber: mobile },{data:form?.formType}],
     // });
-    const existingRecord = await Data.findById(_id);
+    const existingRecord = await Data.findOne( {
+            $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+          });
     if (!existingRecord) {
       return res.status(404).json({
         success: false,
         message: "Record not found. Please submit the form first.",
       });
     }
-    if (mobile !== undefined && mobile !== "") {
-      // Check if mobile is same as existing reference number in this record
-      if (
-        existingRecord.refferenceNumber &&
-        mobile === existingRecord.refferenceNumber
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Mobile number cannot be the same as the existing reference number in this record.",
-        });
-      }
+    // if (mobile !== undefined && mobile !== "") {
+    //   // Check if mobile is same as existing reference number in this record
+    //   if (
+    //     existingRecord.refferenceNumber &&
+    //     mobile === existingRecord.refferenceNumber
+    //   ) {
+    //     return res.status(400).json({
+    //       success: false,
+    //       message:
+    //         "Mobile number cannot be the same as the existing reference number in this record.",
+    //     });
+    //   }
 
-      // Check for duplicate mobile numbers in OTHER records (same form type only)
-      const duplicateCheckQuery = {
-        _id: { $ne: _id }, // Exclude the current record being updated
-        $and: [
-          {
-            $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-          },
-          { data: form?.formType }, // Only check within same form type
-        ],
-      };
+    //   // Check for duplicate mobile numbers in OTHER records (same form type only)
+    //   const duplicateCheckQuery = {
+    //     _id: { $ne: _id }, // Exclude the current record being updated
+    //     $and: [
+    //       {
+    //         $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+    //       },
+    //       { data: form?.formType }, // Only check within same form type
+    //     ],
+    //   };
 
-      const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-      if (duplicateRecord) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Mobile number or reference number already exists in another record.",
-        });
-      }
-    }
+    //   const duplicateRecord = await Data.findOne(duplicateCheckQuery);
+    //   if (duplicateRecord) {
+    //     return res.status(400).json({
+    //       success: false,
+    //       message:
+    //         "Mobile number or reference number already exists in another record.",
+    //     });
+    //   }
+    // }
     const updateFields: any = {};
     if (name !== undefined) updateFields.name = name;
     if (mobile !== undefined) updateFields.mobile = mobile;
@@ -745,6 +815,7 @@ export const updateForm = async (req: Request, res: Response) => {
       updateFields.prefferedCourse = req.body.prefferedCourse;
     if (status !== undefined) updateFields.status = status;
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
+    
 
     // Update the record
     const updatedRecord = await Data.findByIdAndUpdate(_id, updateFields, {
@@ -822,6 +893,7 @@ export const updateRow = async (req: Request, res: Response) => {
       priceRange,
       dateOfBirth,
       profilePhoto,
+      aadharId,
     } = req.body;
 
     if (!id) {
@@ -906,7 +978,8 @@ export const updateRow = async (req: Request, res: Response) => {
       }
     }
 
-    const updateFields: any = {};
+    const updateFields: any = dataControllerHooks.managetRegistrationPaymentUpdate(existingRecord,req.body );
+   
     if (mobile !== undefined) updateFields.mobile = mobile;
     if (name !== undefined) updateFields.name = name;
     if (status !== undefined) updateFields.status = status;
@@ -962,7 +1035,8 @@ export const updateRow = async (req: Request, res: Response) => {
       updateFields.prefferedCourse = prefferedCourse;
     if (priceRange !== undefined) updateFields.priceRange = priceRange;
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
-
+    if (aadharId !== undefined) updateFields.aadharId = aadharId;
+    
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
@@ -1627,7 +1701,7 @@ export const getFormData = async (req: Request, res: Response) => {
 
     const form = await FormTracking.findOne(
       { trackingId },
-      { currentStep: 1, status: 1, dataId: 1, formType: 1 }
+      { currentStep: 1, status: 1, dataId: 1, formType: 1, isReference: 1, allowMultiple: 1 }
     );
     if (!form) {
       return res.status(200).json({
@@ -1670,23 +1744,52 @@ export const softDeleteData = async (req: Request, res: Response) => {
       });
     }
 
-    // Soft delete multiple records
-    const result = await Data.updateMany(
-      { _id: { $in: idsToDelete } },
-      { isDeleted: true }
-    );
+    const softDeleteTargets = await Data.find({ _id: { $in: idsToDelete }, isDeleted: false });
+    const hardDeleteTargets = await Data.find({ _id: { $in: idsToDelete }, isDeleted: true });
 
-    if (result.matchedCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No data records found",
+    if (hardDeleteTargets.length > 0) { 
+      // Permanently delete records that are already soft-deleted
+      const hardDeleteIds = hardDeleteTargets.map(record => record._id);
+      const result = await Data.deleteMany({ _id: { $in: hardDeleteIds } });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "No data records found for permanent deletion",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `${result.deletedCount} data record(s) permanently deleted`,
       });
     }
 
-    res.status(200).json({
-      success: true,
-      message: `${result.modifiedCount} data record(s) deleted successfully`,
-    });
+
+    if (softDeleteTargets.length > 0) {
+      // Soft delete multiple records
+
+      const softDeleteIds = softDeleteTargets.map(record => record._id);
+      const result = await Data.updateMany(
+        { _id: { $in: softDeleteIds } },
+        { isDeleted: true }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "No data records found",
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `${result.modifiedCount} data record(s) deleted successfully`,
+      });
+    }
+
+
+
   } catch (error: any) {
     console.error("Error soft deleting data:", error);
     res.status(500).json({
