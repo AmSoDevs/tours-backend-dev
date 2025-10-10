@@ -515,6 +515,7 @@ export const submitForm = async (req: Request, res: Response) => {
       name,
       mobile,
       whatsapp,
+      altMobNumber, 
       preferCountry,
       preferJobs,
       job,
@@ -600,6 +601,7 @@ export const submitForm = async (req: Request, res: Response) => {
       mobile,
       name,
       whatsapp,
+      altMobNumber,
       preferCountry,
       preferJobs,
       job,
@@ -688,6 +690,7 @@ export const updateForm = async (req: Request, res: Response) => {
       name,
       mobile,
       whatsapp,
+      altMobNumber, 
       preferCountry,
       preferJobs,
       job,
@@ -775,6 +778,7 @@ export const updateForm = async (req: Request, res: Response) => {
     if (name !== undefined) updateFields.name = name;
     if (mobile !== undefined) updateFields.mobile = mobile;
     if (whatsapp !== undefined) updateFields.whatsapp = whatsapp;
+    if (altMobNumber !== undefined) updateFields.altMobNumber = altMobNumber;
     if (preferCountry !== undefined) updateFields.preferCountry = preferCountry;
     if (preferJobs !== undefined) updateFields.preferJobs = preferJobs;
     if (job !== undefined) updateFields.job = job;
@@ -850,6 +854,7 @@ export const updateRow = async (req: Request, res: Response) => {
     const {
       id,
       mobile,
+      altMobNumber,
       name,
       status,
       remarkFirst,
@@ -981,6 +986,7 @@ export const updateRow = async (req: Request, res: Response) => {
     const updateFields: any = dataControllerHooks.managetRegistrationPaymentUpdate(existingRecord,req.body );
    
     if (mobile !== undefined) updateFields.mobile = mobile;
+    if (altMobNumber !== undefined) updateFields.altMobNumber = altMobNumber;
     if (name !== undefined) updateFields.name = name;
     if (status !== undefined) updateFields.status = status;
     if (remarkFirst !== undefined) updateFields.remarkFirst = remarkFirst;
