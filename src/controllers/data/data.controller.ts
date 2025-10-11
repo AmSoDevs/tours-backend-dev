@@ -148,49 +148,27 @@ export const importData = async (req: Request, res: Response) => {
 
 export const getData = async (req: Request, res: Response) => {
   try {
-    const {
-      page = 1,
-      limit,
-      dataType,
-      staffId,
-      status,
-      data: dataFilter,
-      search,
-      sortBy = "createdAt",
-      sortOrder = "desc",
-      showDeletedOnly = false,
-      showWithRemindersOnly = false,
-      
-    } = req.query;
+   const page = Number(req.query.page) || 1;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const dataType = String(req.query.dataType || "");
+    const staffId = String(req.query.staffId || "");
+    const status = String(req.query.status || "");
+    const dataFilter = String(req.query.data || "");
+    const search = String(req.query.search || "");
+    const sortBy = String(req.query.sortBy || "createdAt");
+    const sortOrder = String(req.query.sortOrder || "desc");
+    const showDeletedOnly = String(req.query.showDeletedOnly || "false");
+    const showWithRemindersOnly = String(req.query.showWithRemindersOnly || "false");
+    const type = String(req.query.type || "all"); 
 
-    const query: any = {}
+    const query: any = {};
 
+    query.isDeleted = showDeletedOnly === "true";
+    if (showWithRemindersOnly === "true") query.reminderDateAndTime = { $ne: null };
 
-    if (showDeletedOnly === "true") {
-      query.isDeleted = true;
-    }
-    else {
-      query.isDeleted = false;
-    }
-
-    if(showWithRemindersOnly==="true"){
-      query.reminderDateAndTime = { $ne: null };
-
-    }
-
-
-
-    if (dataType && dataType !== "all") {
-      query.dataType = { $regex: dataType, $options: "i" };
-    }
-
-    if (staffId && staffId !== "all") {
-      query.assignedStaff = staffId;
-    }
-
-    if (status && status !== "all") {
-      query.status = { $regex: status, $options: "i" };
-    }
+    if (dataType && dataType !== "all") query.dataType = { $regex: dataType, $options: "i" };
+    if (staffId && staffId !== "all") query.assignedStaff = staffId;
+    if (status && status !== "all") query.status = { $regex: status, $options: "i" };
 
     if (dataFilter && dataFilter !== "all") {
       if (dataFilter === "register") {
@@ -214,60 +192,90 @@ export const getData = async (req: Request, res: Response) => {
     }
 
     const sortObj: any = {};
-    if (sortBy === "createdAt") {
-      sortObj.createdAt = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "updatedAt") {
-      sortObj.updatedAt = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "name") {
-      sortObj.name = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "mobile") {
-      sortObj.mobile = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "status") {
-      sortObj.status = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "slNo") {
-      sortObj.slNo = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "assignedStaff.staffId") {
-      sortObj["assignedStaff.staffId"] = sortOrder === "desc" ? -1 : 1;
-    }
+    const sortFieldMap: any = {
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      name: "name",
+      mobile: "mobile",
+      status: "status",
+      slNo: "slNo",
+      "assignedStaff.staffId": "assignedStaff.staffId",
+    };
+    const field = sortFieldMap[sortBy] || "createdAt";
+    sortObj[field] = sortOrder === "desc" ? -1 : 1;
 
-    let data;
-    let total;
-    let pagination;
-    if (limit) {
-      const skip = (Number(page) - 1) * Number(limit);
-      data = await Data.find(query)
+    const skip = (Number(page) - 1) * Number(limit || 0);
 
-        .populate("assignedStaff", "name staffId")
-        .populate("files")
-        .sort(sortObj)
-        .skip(skip)
-        .limit(Number(limit));
+    let data = await Data.find(query)
+      .populate("assignedStaff", "name staffId")
+      .populate("files")
+      .sort(sortObj)
+      .skip(skip)
+      .limit(limit ? Number(limit) : 0);
 
-      total = await Data.countDocuments(query);
-      pagination = {
-        currentPage: Number(page),
-        totalPages: Math.ceil(total / Number(limit)),
-        totalRecords: total,
-        limit: Number(limit),
-      };
-    } else {
-      data = await Data.find(query)
-        .populate("assignedStaff", "name staffId")
-        .populate("files")
-        .sort(sortObj);
+    const total = await Data.countDocuments(query);
+    const pagination = {
+      currentPage: Number(page),
+      totalPages: limit ? Math.ceil(total / Number(limit)) : 1,
+      totalRecords: total,
+      limit: Number(limit) || total,
+    };
 
-      total = data.length;
-      pagination = {
-        currentPage: 1,
-        totalPages: 1,
-        totalRecords: total,
-        limit: total,
-      };
+    const updatedData = await Promise.all(
+      data.map(async (record: any) => {
+        const isBulk = record.data?.toLowerCase() === "bulk";
+
+        const mobile = String(record.mobile || "").trim();
+        const referenceNumber = String(record.refferenceNumber || "").trim();
+
+        let isReferenceRegistered = false;
+        let isBulkRegistered = false;
+
+        if (referenceNumber) {
+          const registeredRef = await Data.findOne({
+            $or: [
+              { mobile: referenceNumber },
+              { refferenceNumber: referenceNumber },
+            ],
+            data: "register",
+            isDeleted: false,
+          });
+          if (registeredRef) isReferenceRegistered = true;
+        }
+
+        if (mobile) {
+          const selfRegistered = await Data.findOne({
+            $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+            data: "register",
+            isDeleted: false,
+          });
+          if (selfRegistered) isBulkRegistered = true;
+        }
+
+        return {
+          ...record.toObject(),
+          isBulk,
+          isReferenceRegistered,
+          isBulkRegistered,
+        };
+      })
+    );
+
+    let filteredData = updatedData;
+
+    if (type === "old") {
+      filteredData = updatedData.filter(
+        (r) => r.isBulk && r.isReferenceRegistered && !r.isBulkRegistered
+      );
+    } else if (type === "new") {
+      filteredData = updatedData.filter(
+        (r) => r.isBulk && !r.isReferenceRegistered && !r.isBulkRegistered
+      );
     }
 
     return res.status(200).json({
       success: true,
-      data,
+      data: filteredData,
       pagination,
     });
   } catch (error: any) {
@@ -279,6 +287,7 @@ export const getData = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const updateDataStatus = async (req: Request, res: Response) => {
   try {
