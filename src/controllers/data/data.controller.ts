@@ -148,7 +148,7 @@ export const importData = async (req: Request, res: Response) => {
 
 export const getData = async (req: Request, res: Response) => {
   try {
-   const page = Number(req.query.page) || 1;
+    const page = Number(req.query.page) || 1;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     const dataType = String(req.query.dataType || "");
     const staffId = String(req.query.staffId || "");
@@ -158,17 +158,22 @@ export const getData = async (req: Request, res: Response) => {
     const sortBy = String(req.query.sortBy || "createdAt");
     const sortOrder = String(req.query.sortOrder || "desc");
     const showDeletedOnly = String(req.query.showDeletedOnly || "false");
-    const showWithRemindersOnly = String(req.query.showWithRemindersOnly || "false");
-    const type = String(req.query.type || "all"); 
+    const showWithRemindersOnly = String(
+      req.query.showWithRemindersOnly || "false"
+    );
+    const type = String(req.query.type || "all");
 
     const query: any = {};
 
     query.isDeleted = showDeletedOnly === "true";
-    if (showWithRemindersOnly === "true") query.reminderDateAndTime = { $ne: null };
+    if (showWithRemindersOnly === "true")
+      query.reminderDateAndTime = { $ne: null };
 
-    if (dataType && dataType !== "all") query.dataType = { $regex: dataType, $options: "i" };
+    if (dataType && dataType !== "all")
+      query.dataType = { $regex: dataType, $options: "i" };
     if (staffId && staffId !== "all") query.assignedStaff = staffId;
-    if (status && status !== "all") query.status = { $regex: status, $options: "i" };
+    if (status && status !== "all")
+      query.status = { $regex: status, $options: "i" };
 
     if (dataFilter && dataFilter !== "all") {
       if (dataFilter === "register") {
@@ -288,7 +293,6 @@ export const getData = async (req: Request, res: Response) => {
   }
 };
 
-
 export const updateDataStatus = async (req: Request, res: Response) => {
   try {
     const { ids, status, reminderDateAndTime } = req.body;
@@ -307,32 +311,30 @@ export const updateDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    const recordsWithReminders = await Data.find({ 
-      _id: { $in: ids }, 
-      reminderDateAndTime: { $ne: null } 
+    const recordsWithReminders = await Data.find({
+      _id: { $in: ids },
+      reminderDateAndTime: { $ne: null },
     });
 
-    const recordWithoutReminders = await Data.find({ 
-      _id: { $in: ids }, 
+    const recordWithoutReminders = await Data.find({
+      _id: { $in: ids },
       $or: [
         { reminderDateAndTime: { $eq: null } },
-        { reminderDateAndTime: { $exists: false } }
-      ]
+        { reminderDateAndTime: { $exists: false } },
+      ],
     });
-
 
     const updateDataWithReminders: any = {
       status: status,
-      reminderDateAndTime:""
+      reminderDateAndTime: "",
     };
 
     const updateDataWithoutReminders: any = {
       status: status,
-      reminderDateAndTime : new Date(reminderDateAndTime) 
+      reminderDateAndTime: new Date(reminderDateAndTime),
     };
 
-    if(recordsWithReminders?.length){
-
+    if (recordsWithReminders?.length) {
       const ids = recordsWithReminders.map((record) => record._id);
       const updateResult = await Data.updateMany(
         {
@@ -342,11 +344,9 @@ export const updateDataStatus = async (req: Request, res: Response) => {
           $set: updateDataWithReminders,
         }
       );
-
     }
 
-    if(recordWithoutReminders?.length){
-
+    if (recordWithoutReminders?.length) {
       const ids = recordWithoutReminders.map((record) => record._id);
       const updateResult = await Data.updateMany(
         {
@@ -356,12 +356,7 @@ export const updateDataStatus = async (req: Request, res: Response) => {
           $set: updateDataWithoutReminders,
         }
       );
-
     }
-
-   
-
-   
 
     // if (updateResult.modifiedCount === 0) {
     //   return res.status(404).json({
@@ -609,9 +604,10 @@ export const submitForm = async (req: Request, res: Response) => {
     }
 
     const slNo = await generateUniqueSlNo();
-    const profileId = await dataControllerHooks.createRegistrationUniqueSerialNumber(
-      form.formType
-    );
+    const profileId =
+      await dataControllerHooks.createRegistrationUniqueSerialNumber(
+        form.formType
+      );
 
     const newData = new Data({
       slNo,
@@ -685,14 +681,13 @@ export const submitForm = async (req: Request, res: Response) => {
   }
 };
 
-
 export const updateForm = async (req: Request, res: Response) => {
   try {
     const {
       name,
       mobile,
       whatsapp,
-      altMobNumber, 
+      altMobNumber,
       preferCountry,
       preferJobs,
       job,
@@ -734,9 +729,9 @@ export const updateForm = async (req: Request, res: Response) => {
     // const existingRecord = await Data.findOne({
     //   $or: [{ mobile: mobile }, { refferenceNumber: mobile },{data:form?.formType}],
     // });
-    const existingRecord = await Data.findOne( {
-            $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-          });
+    const existingRecord = await Data.findOne({
+      $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+    });
     if (!existingRecord) {
       return res.status(404).json({
         success: false,
@@ -821,7 +816,6 @@ export const updateForm = async (req: Request, res: Response) => {
       updateFields.prefferedCourse = req.body.prefferedCourse;
     if (status !== undefined) updateFields.status = status;
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
-    
 
     // Update the record
     const updatedRecord = await Data.findByIdAndUpdate(_id, updateFields, {
@@ -985,8 +979,12 @@ export const updateRow = async (req: Request, res: Response) => {
       }
     }
 
-    const updateFields: any = dataControllerHooks.managetRegistrationPaymentUpdate(existingRecord,req.body );
-   
+    const updateFields: any =
+      dataControllerHooks.managetRegistrationPaymentUpdate(
+        existingRecord,
+        req.body
+      );
+
     if (mobile !== undefined) updateFields.mobile = mobile;
     if (altMobNumber !== undefined) updateFields.altMobNumber = altMobNumber;
     if (name !== undefined) updateFields.name = name;
@@ -1044,7 +1042,7 @@ export const updateRow = async (req: Request, res: Response) => {
     if (priceRange !== undefined) updateFields.priceRange = priceRange;
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
     if (aadharId !== undefined) updateFields.aadharId = aadharId;
-    
+
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
@@ -1709,7 +1707,14 @@ export const getFormData = async (req: Request, res: Response) => {
 
     const form = await FormTracking.findOne(
       { trackingId },
-      { currentStep: 1, status: 1, dataId: 1, formType: 1, isReference: 1, allowMultiple: 1 }
+      {
+        currentStep: 1,
+        status: 1,
+        dataId: 1,
+        formType: 1,
+        isReference: 1,
+        allowMultiple: 1,
+      }
     );
     if (!form) {
       return res.status(200).json({
@@ -1717,9 +1722,11 @@ export const getFormData = async (req: Request, res: Response) => {
         message: "No registration form found on this id",
       });
     }
-    let data;
-    if (form?.dataId) {
-      data = await Data.findOne({ _id: form?.dataId });
+
+    let data = null;
+
+    if (form?.dataId && form?.allowMultiple !== true) {
+      data = await Data.findOne({ _id: form.dataId });
     }
 
     return res.status(200).json({
@@ -1752,12 +1759,18 @@ export const softDeleteData = async (req: Request, res: Response) => {
       });
     }
 
-    const softDeleteTargets = await Data.find({ _id: { $in: idsToDelete }, isDeleted: false });
-    const hardDeleteTargets = await Data.find({ _id: { $in: idsToDelete }, isDeleted: true });
+    const softDeleteTargets = await Data.find({
+      _id: { $in: idsToDelete },
+      isDeleted: false,
+    });
+    const hardDeleteTargets = await Data.find({
+      _id: { $in: idsToDelete },
+      isDeleted: true,
+    });
 
-    if (hardDeleteTargets.length > 0) { 
+    if (hardDeleteTargets.length > 0) {
       // Permanently delete records that are already soft-deleted
-      const hardDeleteIds = hardDeleteTargets.map(record => record._id);
+      const hardDeleteIds = hardDeleteTargets.map((record) => record._id);
       const result = await Data.deleteMany({ _id: { $in: hardDeleteIds } });
 
       if (result.deletedCount === 0) {
@@ -1773,11 +1786,10 @@ export const softDeleteData = async (req: Request, res: Response) => {
       });
     }
 
-
     if (softDeleteTargets.length > 0) {
       // Soft delete multiple records
 
-      const softDeleteIds = softDeleteTargets.map(record => record._id);
+      const softDeleteIds = softDeleteTargets.map((record) => record._id);
       const result = await Data.updateMany(
         { _id: { $in: softDeleteIds } },
         { isDeleted: true }
@@ -1795,9 +1807,6 @@ export const softDeleteData = async (req: Request, res: Response) => {
         message: `${result.modifiedCount} data record(s) deleted successfully`,
       });
     }
-
-
-
   } catch (error: any) {
     console.error("Error soft deleting data:", error);
     res.status(500).json({
