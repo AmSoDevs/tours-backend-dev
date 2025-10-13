@@ -89,7 +89,11 @@ export const importData = async (req: Request, res: Response) => {
 
           const existingRecord =
             duplicateQuery.length > 0
-              ? await Data.findOne({ $or: duplicateQuery })
+              ? await Data.findOne(
+                  record.data?.toLowerCase() === "visa"
+                    ? { $or: duplicateQuery } // 🔥 For visa, check globally
+                    : { $or: duplicateQuery, data: record.data } // For others, check within same type
+                )
               : null;
 
           if (existingRecord) {
@@ -267,6 +271,12 @@ export const getData = async (req: Request, res: Response) => {
     );
 
     let filteredData = updatedData;
+
+    if (status.toLowerCase() === "success") {
+      filteredData = updatedData.filter(
+        (r) => !(r.isReferenceRegistered && r.isBulkRegistered)
+      );
+    }
 
     if (type === "old") {
       filteredData = updatedData.filter(
@@ -828,8 +838,12 @@ export const updateForm = async (req: Request, res: Response) => {
       }
     );
 
-    console.log("Updating record:", recordIdToUpdate, "with photo:", profilePhoto);
-
+    console.log(
+      "Updating record:",
+      recordIdToUpdate,
+      "with photo:",
+      profilePhoto
+    );
 
     // Update FormTracking currentStep and status
     if (step !== undefined) {
@@ -959,10 +973,19 @@ export const updateRow = async (req: Request, res: Response) => {
         });
       }
 
-      const duplicateCheckQuery: any = {
-        _id: { $ne: id }, // Exclude the current record being updated
+      const duplicateCheckQuery: {
+        _id: { $ne: string };
+        $or: Record<string, any>[];
+        data?: string;
+      } = {
+        _id: { $ne: id },
         $or: [],
       };
+
+      const isVisaType = existingRecord?.data?.toLowerCase() === "visa";
+      if (!isVisaType) {
+        duplicateCheckQuery.data = existingRecord?.data;
+      }
 
       if (mobile !== undefined && mobile !== "") {
         duplicateCheckQuery.$or.push(
@@ -1623,10 +1646,19 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         });
       }
 
-      const duplicateCheckQuery: any = {
+      const duplicateCheckQuery: {
+        _id: { $ne: string };
+        $or: Record<string, any>[];
+        data?: string;
+      } = {
         _id: { $ne: id },
         $or: [],
       };
+
+      const isVisaType = record?.data?.toLowerCase() === "visa";
+      if (!isVisaType) {
+        duplicateCheckQuery.data = record?.data;
+      }
 
       if (mobile !== undefined) {
         duplicateCheckQuery.$or.push(
