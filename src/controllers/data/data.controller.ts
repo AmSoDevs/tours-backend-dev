@@ -524,7 +524,7 @@ export const submitForm = async (req: Request, res: Response) => {
       name,
       mobile,
       whatsapp,
-      altMobNumber, 
+      altMobNumber,
       preferCountry,
       preferJobs,
       job,
@@ -543,7 +543,6 @@ export const submitForm = async (req: Request, res: Response) => {
       createProfileFor,
       contactPersonName,
       trackingId,
-
     } = req.body;
 
     if (!name || !mobile) {
@@ -552,39 +551,43 @@ export const submitForm = async (req: Request, res: Response) => {
         message: "Name and mobile number are required.",
       });
     }
+
     const form = await FormTracking.findOne({ trackingId });
+
     if (!form) {
       return res.status(400).json({
         success: false,
-        message: "Invalid form id",
+        message: "Invalid form ID",
       });
     }
 
-    const existingRecord = await Data.findOne({
-      $and: [
-        {
-          $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-        },
-        { data: form?.formType, },
-      ],
-    });
+    // --- NEW LOGIC STARTS HERE ---
+    const isMultipleAllowed = form.allowMultiple === true;
 
-    if (existingRecord && form?.status === "shared") {
-      return res.status(400).json({
-        success: false,
-        message: "Mobile number already exists.",
+    // If multiple is NOT allowed, then we check for duplicates
+    if (!isMultipleAllowed) {
+      const existingRecord = await Data.findOne({
+        $and: [
+          {
+            $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+          },
+          { data: form.formType },
+        ],
       });
+
+      if (existingRecord && form.status === "shared") {
+        return res.status(400).json({
+          success: false,
+          message: "Mobile number already exists.",
+        });
+      }
     }
-    //  else if (!existingRecord && form?.status === "in_progress") {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Record not found. Please submit the form first.",
-    //   });
-    // }
+    // --- NEW LOGIC ENDS HERE ---
+
     let assignedStaff: any;
     let staffAssignment: any;
 
-    if (form?.staffId) {
+    if (form.staffId) {
       assignedStaff = form.staffId;
     } else {
       const staffMembers = await Staff.find({
@@ -604,11 +607,19 @@ export const submitForm = async (req: Request, res: Response) => {
       assignedStaff = assignedStaffId;
       staffAssignment = updatedStaffAssignment;
     }
-    let newData;
-    let updateData:any = {
-      data: form?.formType,
-      mobile,
+
+    const slNo = await generateUniqueSlNo();
+    const profileId = await dataControllerHooks.createRegistrationUniqueSerialNumber(
+      form.formType
+    );
+
+    const newData = new Data({
+      slNo,
+      profileId,
+      data: form.formType,
+      dataType: "self",
       name,
+      mobile,
       whatsapp,
       altMobNumber,
       preferCountry,
@@ -637,50 +648,31 @@ export const submitForm = async (req: Request, res: Response) => {
       prefferedSalary: req.body.prefferedSalary,
       visaType: req.body.visaType,
       prefferedCourse: req.body.prefferedCourse,
-      assignedStaff: assignedStaff,
+      assignedStaff,
       isDeleted: false,
-    };
-    if (form?.dataId) {
+    });
 
-      if(existingRecord?.data==="bulk" ||!existingRecord?.data ){
-        updateData.profileId = await dataControllerHooks.createRegistrationUniqueSerialNumber(form?.formType);
-      }
-     
-      newData = await Data.findByIdAndUpdate(form?.dataId, updateData, {
-        new: true,
-        runValidators: true,
-      });
+    await newData.save();
+
+    // Update form only if single entry is allowed
+    if (!isMultipleAllowed) {
+      form.status = "in_progress";
+      form.dataId = newData._id;
+      form.currentStep = 1;
+      if (!form.staffId) form.staffId = assignedStaff;
+      await form.save();
     } else {
-
-
-      const slNo = await generateUniqueSlNo();
-      const profileId = await dataControllerHooks.createRegistrationUniqueSerialNumber(form?.formType);
-
-      newData = new Data({
-        ...updateData,
-        slNo,
-        profileId,
-        dataType: "self",
-        data: form?.formType,
-      });
-
-      await newData.save();
-    }
-    form.status = "in_progress";
-    form.dataId = newData?._id;
-    form.currentStep = 1;
-
-    // Only assign staff if not already assigned
-    if (!form.staffId) {
-      form.staffId = assignedStaff;
+      // For allowMultiple = true, don't overwrite dataId or current record
+      form.status = "in_progress";
+      form.currentStep = 1;
+      await form.save();
     }
 
-    await form.save();
-
-    // Staff assignment is already saved by the helper function
     return res.status(201).json({
       success: true,
-      message: "Form submitted successfully",
+      message: isMultipleAllowed
+        ? "New form entry created successfully (multiple allowed)"
+        : "Form submitted successfully",
       data: newData,
     });
   } catch (error: any) {
@@ -692,6 +684,7 @@ export const submitForm = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const updateForm = async (req: Request, res: Response) => {
   try {
