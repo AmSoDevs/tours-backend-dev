@@ -817,11 +817,20 @@ export const updateForm = async (req: Request, res: Response) => {
     if (status !== undefined) updateFields.status = status;
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
 
-    // Update the record
-    const updatedRecord = await Data.findByIdAndUpdate(_id, updateFields, {
-      new: true,
-      runValidators: true,
-    });
+    const recordIdToUpdate = _id || existingRecord._id;
+
+    const updatedRecord = await Data.findByIdAndUpdate(
+      recordIdToUpdate,
+      updateFields,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    console.log("Updating record:", recordIdToUpdate, "with photo:", profilePhoto);
+
+
     // Update FormTracking currentStep and status
     if (step !== undefined) {
       form.currentStep = step;
@@ -904,14 +913,16 @@ export const updateRow = async (req: Request, res: Response) => {
       });
     }
 
-    const existingRecord = await Data.findById(id);
+    const existingRecord = await Data.findOne({
+      $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+    });
+
     if (!existingRecord) {
       return res.status(404).json({
         success: false,
-        message: "Record not found",
+        message: "Record not found. Please submit the form first.",
       });
     }
-
     if (mobile !== undefined || refferenceNumber !== undefined) {
       if (
         mobile !== undefined &&
@@ -1043,10 +1054,14 @@ export const updateRow = async (req: Request, res: Response) => {
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
     if (aadharId !== undefined) updateFields.aadharId = aadharId;
 
-    const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
-      new: true,
-      runValidators: true,
-    });
+    const updatedRecord = await Data.findByIdAndUpdate(
+      existingRecord._id,
+      updateFields,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
 
     return res.status(200).json({
       success: true,
