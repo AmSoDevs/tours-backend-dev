@@ -4,7 +4,7 @@ exports.staffRouter = void 0;
 const express_1 = require("express");
 const auth_1 = require("../middleware/auth");
 const staff_controller_1 = require("../controllers/staff.controller");
-const auth_controller_1 = require("../controllers/auth.controller");
+const auth_controller_1 = require("../controllers/auth/auth.controller");
 exports.staffRouter = (0, express_1.Router)();
 // Public route for staff login (no authentication required)
 exports.staffRouter.post("/login", auth_controller_1.staffLogin);
