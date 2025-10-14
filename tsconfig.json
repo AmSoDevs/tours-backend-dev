@@ -10,7 +10,17 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "types": [
+      "node",
+      "express",
+      "cors",
+      "morgan",
+      "jsonwebtoken",
+      "multer",
+      "bcrypt"
+    ],
+    "typeRoots": ["./node_modules/@types"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]
