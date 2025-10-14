@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.dataRouter = void 0;
 const express_1 = require("express");
-const data_controller_1 = require("../controllers/data.controller");
+const data_controller_1 = require("../controllers/data/data.controller");
 const auth_1 = require("../middleware/auth");
 exports.dataRouter = (0, express_1.Router)();
 exports.dataRouter.get("/staff/:id", auth_1.authenticate, auth_1.requireStaff, data_controller_1.getStaffAssignedData);

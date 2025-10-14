@@ -33,60 +33,15 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FormTracking = void 0;
+exports.Files = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-const FormTrackingSchema = new mongoose_1.Schema({
-    trackingId: {
-        type: String,
-        required: true,
-        unique: true,
-    },
-    formType: {
-        type: String,
-        enum: ["bulk", "lead", "register", "house", "matrimony", "job", "visa"],
-    },
-    staffId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: "Staff",
-    },
-    dataId: {
-        type: mongoose_1.Schema.Types.ObjectId,
-        ref: "Data",
-    },
-    sharedAt: {
-        type: Date,
-        required: true,
-        default: Date.now,
-    },
-    submittedAt: {
-        type: Date,
-    },
-    status: {
-        type: String,
-        required: true,
-        enum: ["shared", "in_progress", "submitted", "expired", "abandoned"],
-        default: "shared",
-    },
-    isActive: {
-        type: Boolean,
-        default: true,
-    },
-    currentStep: {
-        type: Number,
-        default: 0,
-    },
-    isReference: {
-        type: Boolean,
-        default: false,
-        required: false,
-    },
-    allowMultiple: {
-        type: Boolean,
-        default: false,
-        required: false,
-    },
-}, {
-    timestamps: true,
-});
-exports.FormTracking = mongoose_1.default.model("FormTracking", FormTrackingSchema);
-//# sourceMappingURL=FormTracking.js.map
+const FileSchema = new mongoose_1.Schema({
+    url: { type: String, required: true },
+    createdBy: { type: mongoose_1.Schema.Types.ObjectId, ref: "User", required: false },
+    title: { type: String },
+    context: { type: String, enum: ["staff", "data", "other"], required: true, default: "other" },
+    staffId: { type: mongoose_1.Schema.Types.ObjectId, ref: "Staff" },
+    dataId: { type: mongoose_1.Schema.Types.ObjectId, ref: "Data" },
+}, { timestamps: true });
+exports.Files = mongoose_1.default.models.Files || mongoose_1.default.model("Files", FileSchema);
+//# sourceMappingURL=File.model.js.map

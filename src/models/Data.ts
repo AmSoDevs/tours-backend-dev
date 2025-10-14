@@ -8,6 +8,7 @@ export interface DataDocument extends Document {
   dataType: string;
   verified: string;
   mobile: string;
+  altMobNumber?: string;
   status: string;
   name: string;
   remarkFirst: string;
@@ -76,6 +77,7 @@ const DataSchema = new Schema<DataDocument>(
     data: { type: String },
     verified: { type: String },
     mobile: { type: String, required: true },
+    altMobNumber: { type: String},
     name: { type: String },
     remarkFirst: { type: String },
     status: { type: String },

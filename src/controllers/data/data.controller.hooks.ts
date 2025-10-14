@@ -1,3 +1,4 @@
+import { Counter } from "../../models/Counter";
 import { Data } from "../../models/Data";
 
 
@@ -23,50 +24,39 @@ const managetRegistrationPaymentUpdate = (oldData:any, newData:any) => {
 
 }
 
-const createRegistrationUniqueSerialNumber = async (formType:string) => {
+const createRegistrationUniqueSerialNumber = async (formType: string) => {
+  const seriesTemplate: any = {
+    visa: { prefix: "V", startFrom: 100000 },
+    house: { prefix: "H", startFrom: 100000 },
+    job: { prefix: "J", startFrom: 100000 },
+    general: { prefix: "G", startFrom: 100000 },
+    matrimony: { prefix: "M", startFrom: 100000 },
+    bulk: { prefix: "B", startFrom: 100000 },
+  };
 
-    const seriesTemplate:any ={
-        visa:{
-            prefix:"V",
-            startFrom:1000
-        },
-        house:{
-            prefix:"H",
-            startFrom:1000
-        },
-        job:{
-            prefix:"J",
-            startFrom:1000
-        },
-        general:{
-            prefix:"G",
-            startFrom:1000
-        },
-        matrimony:{
-            prefix:"M",
-            startFrom:100000
-        },
-        bulk:{
-            prefix:"B",
-            startFrom:1000
-        }
-    }
+  const series = seriesTemplate[formType] || seriesTemplate["general"];
 
-    const dataType = formType; 
-    const series = seriesTemplate[dataType] || seriesTemplate['general'];
-    const query = {profileId: { $regex: `^${series.prefix}` } };
-   
-    const latestEntry = await Data.findOne(query).sort({ slNo: -1 }).exec();
-    let newSerialNumber;
-    if (latestEntry && latestEntry.profileId) {
-        const latestNumber = parseInt(latestEntry.profileId.replace(series.prefix, ''));
-        newSerialNumber = series.prefix + (latestNumber + 1);
-    } else {
-        newSerialNumber = series.prefix + series.startFrom;
-    }
-    return newSerialNumber;
+  let counter = await Counter.findOne({ prefix: series.prefix });
+  if (!counter) {
+    counter = await Counter.create({
+      prefix: series.prefix,
+      seq: series.startFrom,
+    });
+  }
 
-}
+  const updatedCounter = await Counter.findOneAndUpdate(
+    { prefix: series.prefix },
+    { $inc: { seq: 1 } },
+    { new: true }
+  );
+
+   if (!updatedCounter) {
+    throw new Error(`Failed to update counter for prefix: ${series.prefix}`);
+  }
+
+  return `${series.prefix}${updatedCounter.seq}`;
+};
+
 
 
 

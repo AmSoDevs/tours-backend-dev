@@ -21,6 +21,7 @@ const createSchema = zod_1.z.object({
     gpayNumber: zod_1.z.string().min(6),
     password: zod_1.z.string().min(6),
     isActive: zod_1.z.boolean().default(true),
+    profilePhoto: zod_1.z.string().url().optional(),
 });
 const updateSchema = zod_1.z.object({
     name: zod_1.z.string().min(1).optional(),
@@ -35,6 +36,7 @@ const updateSchema = zod_1.z.object({
     whatsappNumber: zod_1.z.string().min(6).optional(),
     gpayNumber: zod_1.z.string().min(6).optional(),
     password: zod_1.z.string().min(6).optional(),
+    profilePhoto: zod_1.z.string().url().optional(),
 });
 function presentStaff(staff) {
     return {
@@ -54,6 +56,8 @@ function presentStaff(staff) {
         role: staff.role,
         createdAt: staff.createdAt,
         isActive: staff.isActive,
+        profilePhoto: staff.profilePhoto,
+        files: staff.files || []
     };
 }
 async function createStaff(req, res) {
@@ -89,7 +93,9 @@ async function listStaff(_req, res) {
         createdAt: 1,
         isActive: 1,
         password: 1,
-    }).sort({ createdAt: -1 });
+        profilePhoto: 1,
+        files: 1
+    }).sort({ createdAt: -1 }).populate('files');
     await (0, helper_1.checkExistingStaffIds)();
     res.json({ success: true, staff: staff.map(presentStaff) });
 }
@@ -168,8 +174,11 @@ async function updateStaff(req, res) {
         updates.password = d.password;
     if (d.isActive !== undefined)
         updates.isActive = d.isActive;
+    if (d.profilePhoto !== undefined)
+        updates.profilePhoto = d.profilePhoto;
+    console.log("🚀 ~ updateStaff ~ updates:", updates);
     const staff = await Staff_1.Staff.findByIdAndUpdate({ _id: id }, updates, { new: true, projection: {
-            name: 1, isActive: 1, email: 1, username: 1, password: 1, gender: 1, dateOfBirth: 1, qualification: 1, salary: 1, workType: 1, whatsappNumber: 1, gpayNumber: 1, role: 1, staffId: 1, createdAt: 1
+            name: 1, isActive: 1, email: 1, username: 1, password: 1, gender: 1, dateOfBirth: 1, qualification: 1, salary: 1, workType: 1, whatsappNumber: 1, gpayNumber: 1, role: 1, staffId: 1, createdAt: 1, profilePhoto: 1
         } });
     if (!staff) {
         res.status(404).json({ success: false, message: "Staff not found" });

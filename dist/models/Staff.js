@@ -51,6 +51,8 @@ const StaffSchema = new mongoose_1.Schema({
     password: { type: String, required: true },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false, index: true },
+    files: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "Files" }],
+    profilePhoto: { type: String, required: false },
 }, { timestamps: true });
 // Note: staffId will be generated in the controller using generateUniqueStaffId helper
 // This ensures sequential numbering per work type (H1, H2, H3... for home, O1, O2, O3... for office)

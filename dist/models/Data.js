@@ -42,6 +42,7 @@ const DataSchema = new mongoose_1.Schema({
     data: { type: String },
     verified: { type: String },
     mobile: { type: String, required: true },
+    altMobNumber: { type: String },
     name: { type: String },
     remarkFirst: { type: String },
     status: { type: String },
@@ -85,9 +86,13 @@ const DataSchema = new mongoose_1.Schema({
     visaType: { type: String },
     prefferedCourse: { type: String },
     regPayment: { type: String },
+    regPaymentUpdatedAt: { type: Date },
     serPayment: { type: String },
+    serPaymentUpdatedAt: { type: Date },
     regReceived: { type: String },
+    regReceivedUpdatedAt: { type: Date },
     serReceived: { type: String },
+    serReceivedUpdatedAt: { type: Date },
     regBalance: { type: String },
     serBalance: { type: String },
     passportNo: { type: String },
@@ -96,6 +101,7 @@ const DataSchema = new mongoose_1.Schema({
     processing: { type: String },
     serDate: { type: String },
     profilePhoto: { type: String },
+    files: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "Files" }],
 }, { timestamps: true });
 DataSchema.index({ mobile: 1 }, { unique: true });
 DataSchema.index({ slNo: 1 }, { unique: true });

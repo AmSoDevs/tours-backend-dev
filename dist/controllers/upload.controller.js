@@ -39,6 +39,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.uploadSingle = exports.deleteImage = exports.uploadImage = void 0;
 const multer_1 = __importDefault(require("multer"));
 const spaces_1 = require("../config/spaces");
+const File_model_1 = require("../models/File.model");
+const Data_1 = require("../models/Data");
+const Staff_1 = require("../models/Staff");
 const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({
     storage: storage,
@@ -70,10 +73,32 @@ const uploadImage = async (req, res) => {
         }
         const folder = req.body.folder || 'profile-photos';
         const imageUrl = await (0, spaces_1.uploadToSpaces)(req.file, folder);
+        const fileInput = {
+            url: imageUrl,
+            title: req.body.title || '',
+            uploadedBy: req.body.uploadedBy || null,
+            context: req.body.context || 'other',
+            staffId: req.body.staffId || null,
+            dataId: req.body.dataId || null,
+        };
+        const file = await File_model_1.Files.create(fileInput);
+        if (req.body.context === "data") {
+            const existingData = await Data_1.Data.findById(req.body.dataId);
+            const existingFiles = existingData?.files || [];
+            existingFiles.push(file._id);
+            await Data_1.Data.findByIdAndUpdate(req.body.dataId, { $set: { files: existingFiles } });
+        }
+        if (req.body.context === "staff") {
+            const existingData = await Staff_1.Staff.findById(req.body.staffId);
+            const existingFiles = existingData?.files || [];
+            existingFiles.push(file._id);
+            await Staff_1.Staff.findByIdAndUpdate(req.body.staffId, { $set: { files: existingFiles } });
+        }
         res.status(200).json({
             success: true,
             message: 'Image uploaded successfully',
             imageUrl: imageUrl,
+            file,
         });
     }
     catch (error) {
@@ -88,27 +113,54 @@ const uploadImage = async (req, res) => {
 exports.uploadImage = uploadImage;
 const deleteImage = async (req, res) => {
     try {
-        const { imageUrl } = req.body;
-        if (!imageUrl) {
+        const { imageUrl, fileId } = req.body;
+        if (!imageUrl && !fileId) {
             return res.status(400).json({
                 success: false,
-                message: 'Image URL is required',
+                message: 'Image URL or Id is required',
             });
         }
-        // Check if image is still in use in the database
-        const { Data } = await Promise.resolve().then(() => __importStar(require('../models/Data')));
-        const inUse = await Data.findOne({ profilePhoto: imageUrl });
-        if (inUse) {
-            return res.status(400).json({
-                success: false,
-                message: 'Image is still in use and cannot be deleted',
+        if (imageUrl) {
+            // Check if image is still in use in the database
+            const { Data } = await Promise.resolve().then(() => __importStar(require('../models/Data')));
+            const inUse = await Data.findOne({ profilePhoto: imageUrl });
+            if (inUse) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Image is still in use and cannot be deleted',
+                });
+            }
+            await (0, spaces_1.deleteFromSpaces)(imageUrl);
+            res.status(200).json({
+                success: true,
+                message: 'Image deleted successfully',
             });
         }
-        await (0, spaces_1.deleteFromSpaces)(imageUrl);
-        res.status(200).json({
-            success: true,
-            message: 'Image deleted successfully',
-        });
+        if (fileId) {
+            const fileDetails = await File_model_1.Files.findById(fileId);
+            if (!fileDetails) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'File not found',
+                });
+            }
+            const fileUrl = fileDetails.url;
+            const inUse = await Data_1.Data.findOne({ profilePhoto: fileUrl });
+            if (inUse) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Image is still in use and cannot be deleted',
+                });
+            }
+            await File_model_1.Files.findByIdAndDelete(fileId);
+            await Data_1.Data.updateMany({ files: fileId }, { $pull: { files: fileId } });
+            await Staff_1.Staff.updateMany({ files: fileId }, { $pull: { files: fileId } });
+            await (0, spaces_1.deleteFromSpaces)(fileUrl);
+            res.status(200).json({
+                success: true,
+                message: 'Image deleted successfully',
+            });
+        }
     }
     catch (error) {
         console.error('Error deleting image:', error);
