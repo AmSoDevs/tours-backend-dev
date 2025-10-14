@@ -166,12 +166,8 @@ export const getData = async (req: Request, res: Response) => {
       req.query.showWithRemindersOnly || "false"
     );
     const type = String(req.query.type || "all");
-    const startDate = req.query.startDate
-      ? new Date(String(req.query.startDate))
-      : null;
-    const endDate = req.query.endDate
-      ? new Date(String(req.query.endDate))
-      : null;
+    const startDate = req.query.startDate ? String(req.query.startDate) : "";
+    const endDate = req.query.endDate ? String(req.query.endDate) : "";
 
     const query: any = {};
     query.isDeleted = showDeletedOnly === "true";
@@ -206,18 +202,15 @@ export const getData = async (req: Request, res: Response) => {
       ];
     }
 
-    // ✅ Date range filter
-    if (startDate && endDate) {
-      query.createdAt = {
-        $gte: startDate,
-        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
-      };
-    } else if (startDate) {
-      query.createdAt = { $gte: startDate };
-    } else if (endDate) {
-      query.createdAt = {
-        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
-      };
+    // ✅ Date range filter - apply only if valid date(s) are given
+    const isValidDate = (d: string) => !isNaN(new Date(d).getTime());
+
+    if (isValidDate(startDate) || isValidDate(endDate)) {
+      const dateFilter: any = {};
+      if (isValidDate(startDate)) dateFilter.$gte = new Date(startDate);
+      if (isValidDate(endDate))
+        dateFilter.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
+      query.createdAt = dateFilter;
     }
 
     // ✅ Sorting logic
@@ -1153,6 +1146,8 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       search,
       sortBy = "createdAt",
       sortOrder = "desc",
+      startDate,
+      endDate,
     } = req.query;
 
     const query: any = {
@@ -1172,6 +1167,21 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     if (dataFilter && dataFilter !== "all") {
       query.data = { $regex: dataFilter, $options: "i" };
     }
+
+     const isValidDate = (d: string | undefined): boolean =>
+      !!d && !isNaN(new Date(d).getTime());
+
+    if (isValidDate(startDate as string) || isValidDate(endDate as string)) {
+      const dateFilter: any = {};
+      if (isValidDate(startDate as string))
+        dateFilter.$gte = new Date(startDate as string);
+      if (isValidDate(endDate as string))
+        dateFilter.$lte = new Date(
+          new Date(endDate as string).setHours(23, 59, 59, 999)
+        );
+      query.createdAt = dateFilter;
+    }
+    
     if (search && search !== "") {
       const searchRegex = { $regex: search, $options: "i" };
       query.$or = [
