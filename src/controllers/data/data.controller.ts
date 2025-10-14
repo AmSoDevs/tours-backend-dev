@@ -166,27 +166,33 @@ export const getData = async (req: Request, res: Response) => {
       req.query.showWithRemindersOnly || "false"
     );
     const type = String(req.query.type || "all");
+    const startDate = req.query.startDate
+      ? new Date(String(req.query.startDate))
+      : null;
+    const endDate = req.query.endDate
+      ? new Date(String(req.query.endDate))
+      : null;
 
     const query: any = {};
-
     query.isDeleted = showDeletedOnly === "true";
+
     if (showWithRemindersOnly === "true")
       query.reminderDateAndTime = { $ne: null };
 
     if (dataType && dataType !== "all")
       query.dataType = { $regex: dataType, $options: "i" };
+
     if (staffId && staffId !== "all") query.assignedStaff = staffId;
+
     if (status && status !== "all")
       query.status = { $regex: status, $options: "i" };
 
+    // ✅ Simplify dataFilter — handle both bulk and register properly
     if (dataFilter && dataFilter !== "all") {
-      if (dataFilter === "register") {
-        query.data = { $in: ["register", "house", "matrimony", "job", "visa"] };
-      } else {
-        query.data = { $regex: dataFilter, $options: "i" };
-      }
+      query.data = { $regex: dataFilter, $options: "i" };
     }
 
+    // ✅ Search logic
     if (search && search !== "") {
       const searchRegex = { $regex: search, $options: "i" };
       query.$or = [
@@ -200,6 +206,21 @@ export const getData = async (req: Request, res: Response) => {
       ];
     }
 
+    // ✅ Date range filter
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: startDate,
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+      };
+    } else if (startDate) {
+      query.createdAt = { $gte: startDate };
+    } else if (endDate) {
+      query.createdAt = {
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+      };
+    }
+
+    // ✅ Sorting logic
     const sortObj: any = {};
     const sortFieldMap: any = {
       createdAt: "createdAt",
@@ -215,7 +236,8 @@ export const getData = async (req: Request, res: Response) => {
 
     const skip = (Number(page) - 1) * Number(limit || 0);
 
-    let data = await Data.find(query)
+    // ✅ Fetch initial records
+    const data = await Data.find(query)
       .populate("assignedStaff", "name staffId")
       .populate("files")
       .sort(sortObj)
@@ -230,9 +252,12 @@ export const getData = async (req: Request, res: Response) => {
       limit: Number(limit) || total,
     };
 
+    // ✅ Compute relationship flags (for both bulk and register)
     const updatedData = await Promise.all(
       data.map(async (record: any) => {
-        const isBulk = record.data?.toLowerCase() === "bulk";
+        const dataType = record.data?.toLowerCase() || "";
+        const isBulk = dataType === "bulk";
+        const isRegister = dataType === "register";
 
         const mobile = String(record.mobile || "").trim();
         const referenceNumber = String(record.refferenceNumber || "").trim();
@@ -240,6 +265,7 @@ export const getData = async (req: Request, res: Response) => {
         let isReferenceRegistered = false;
         let isBulkRegistered = false;
 
+        // 🔹 For all record types, check if the reference is registered
         if (referenceNumber) {
           const registeredRef = await Data.findOne({
             $or: [
@@ -252,9 +278,10 @@ export const getData = async (req: Request, res: Response) => {
           if (registeredRef) isReferenceRegistered = true;
         }
 
+        // 🔹 For all record types, check if this number is self-registered
         if (mobile) {
           const selfRegistered = await Data.findOne({
-            $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
+            $or: [{ mobile }, { refferenceNumber: mobile }],
             data: "register",
             isDeleted: false,
           });
@@ -264,20 +291,33 @@ export const getData = async (req: Request, res: Response) => {
         return {
           ...record.toObject(),
           isBulk,
+          isRegister,
           isReferenceRegistered,
           isBulkRegistered,
         };
       })
     );
 
+    // ✅ Combined filter logic (status + type)
     let filteredData = updatedData;
 
-    if (status.toLowerCase() === "success") {
-      filteredData = updatedData.filter(
-        (r) => !(r.isReferenceRegistered && r.isBulkRegistered)
-      );
+    if (status && status.toLowerCase() !== "all") {
+      filteredData = updatedData.filter((r) => {
+        const matchesStatus = r.status?.toLowerCase() === status.toLowerCase();
+
+        // Apply additional logic only for bulk
+        if (r.isBulk && status.toLowerCase() === "success") {
+          return (
+            matchesStatus && !(r.isReferenceRegistered && r.isBulkRegistered)
+          );
+        }
+
+        // For register or others, just match by status
+        return matchesStatus;
+      });
     }
 
+    // ✅ Filter type (new / old) — only for bulk records
     if (type === "old") {
       filteredData = updatedData.filter(
         (r) => r.isBulk && r.isReferenceRegistered && !r.isBulkRegistered
