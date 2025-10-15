@@ -133,7 +133,7 @@ const getData = async (req, res) => {
         }
         if (dataFilter && dataFilter !== "all") {
             if (dataFilter === "register") {
-                query.data = { $in: ["register", "house", "matrimony", "job", "visa"] };
+                query.data = { $in: ["register", "house", "matrimony", "job", "visa","pg"] };
             }
             else {
                 query.data = { $regex: dataFilter, $options: "i" };

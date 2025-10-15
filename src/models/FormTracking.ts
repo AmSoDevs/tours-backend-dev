@@ -27,7 +27,7 @@ const FormTrackingSchema = new Schema<IFormTracking>(
     },
     formType: {
       type: String,
-      enum: ["bulk","lead", "register", "house", "matrimony", "job", "visa"],
+      enum: ["bulk","lead", "register", "house", "matrimony", "job", "visa", "pg"],
     },
     staffId: {
       type: Schema.Types.ObjectId,

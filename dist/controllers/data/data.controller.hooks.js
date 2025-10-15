@@ -25,6 +25,7 @@ const createRegistrationUniqueSerialNumber = async (formType) => {
         general: { prefix: "G", startFrom: 100000 },
         matrimony: { prefix: "M", startFrom: 100000 },
         bulk: { prefix: "B", startFrom: 100000 },
+        pg: { prefix: "P" , startFrom: 100000},
     };
     const series = seriesTemplate[formType] || seriesTemplate["general"];
     let counter = await Counter_1.Counter.findOne({ prefix: series.prefix });
