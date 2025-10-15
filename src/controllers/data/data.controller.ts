@@ -23,7 +23,10 @@ export const importData = async (req: Request, res: Response) => {
       });
     }
 
-    const staffMembers = await Staff.find({ isDeleted: false, isActive: true }).select("_id");
+    const staffMembers = await Staff.find({
+      isDeleted: false,
+      isActive: true,
+    }).select("_id");
     if (staffMembers.length === 0) {
       return res.status(400).json({
         success: false,
@@ -110,7 +113,11 @@ export const importData = async (req: Request, res: Response) => {
           results.importedRecords++;
         } catch (error: any) {
           console.error("Error processing record:", record, error);
-          results.errors.push(`Error processing record ${record.mobile || "N/A"}: ${error.message}`);
+          results.errors.push(
+            `Error processing record ${record.mobile || "N/A"}: ${
+              error.message
+            }`
+          );
         }
       }
     }
@@ -129,7 +136,6 @@ export const importData = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 export const getData = async (req: Request, res: Response) => {
   try {
@@ -736,137 +742,88 @@ export const updateForm = async (req: Request, res: Response) => {
       _id,
     } = req.body;
 
-    // Validate required fields
-    if (!name || !mobile) {
+    if (!trackingId) {
       return res.status(400).json({
         success: false,
-        message: "Name and mobile number are required.",
+        message: "Tracking ID is required to update the form.",
       });
     }
+
+    // Find form tracking record
     const form = await FormTracking.findOne({ trackingId });
     if (!form) {
       return res.status(400).json({
         success: false,
-        message: "Invalid form id",
+        message: "Invalid form ID",
       });
     }
-    // const existingRecord = await Data.findOne({
-    //   $or: [{ mobile: mobile }, { refferenceNumber: mobile },{data:form?.formType}],
-    // });
-    const existingRecord = await Data.findOne({
-      $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-    });
-    if (!existingRecord) {
+
+    // ✅ Always get record using dataId from form (NOT mobile)
+    let recordIdToUpdate = form?.dataId;
+
+    // fallback: if provided directly
+    if (!recordIdToUpdate && _id) {
+      recordIdToUpdate = _id;
+    }
+
+    if (!recordIdToUpdate) {
       return res.status(404).json({
         success: false,
-        message: "Record not found. Please submit the form first.",
+        message: "No existing record found to update. Please submit the form first.",
       });
     }
-    // if (mobile !== undefined && mobile !== "") {
-    //   // Check if mobile is same as existing reference number in this record
-    //   if (
-    //     existingRecord.refferenceNumber &&
-    //     mobile === existingRecord.refferenceNumber
-    //   ) {
-    //     return res.status(400).json({
-    //       success: false,
-    //       message:
-    //         "Mobile number cannot be the same as the existing reference number in this record.",
-    //     });
-    //   }
 
-    //   // Check for duplicate mobile numbers in OTHER records (same form type only)
-    //   const duplicateCheckQuery = {
-    //     _id: { $ne: _id }, // Exclude the current record being updated
-    //     $and: [
-    //       {
-    //         $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-    //       },
-    //       { data: form?.formType }, // Only check within same form type
-    //     ],
-    //   };
+    const record = await Data.findById(recordIdToUpdate);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: "Data record not found. Please submit the form first.",
+      });
+    }
 
-    //   const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-    //   if (duplicateRecord) {
-    //     return res.status(400).json({
-    //       success: false,
-    //       message:
-    //         "Mobile number or reference number already exists in another record.",
-    //     });
-    //   }
-    // }
-    const updateFields: any = {};
-    if (name !== undefined) updateFields.name = name;
-    if (mobile !== undefined) updateFields.mobile = mobile;
-    if (whatsapp !== undefined) updateFields.whatsapp = whatsapp;
-    if (altMobNumber !== undefined) updateFields.altMobNumber = altMobNumber;
-    if (preferCountry !== undefined) updateFields.preferCountry = preferCountry;
-    if (preferJobs !== undefined) updateFields.preferJobs = preferJobs;
-    if (job !== undefined) updateFields.job = job;
-    if (searchedHouses !== undefined)
-      updateFields.searchedHouses = searchedHouses;
-    if (gender !== undefined) updateFields.gender = gender;
-    if (dateOfBirth !== undefined) updateFields.dateOfBirth = dateOfBirth;
-    if (maritalStatus !== undefined) updateFields.maritalStatus = maritalStatus;
-    if (religion !== undefined) updateFields.religion = religion;
-    if (education !== undefined) updateFields.education = education;
-    if (jobType !== undefined) updateFields.jobType = jobType;
-    if (monthlyIncome !== undefined) updateFields.monthlyIncome = monthlyIncome;
-    if (spokenLanguage !== undefined)
-      updateFields.spokenLanguage = spokenLanguage;
-    if (district !== undefined) updateFields.district = district;
-    if (city !== undefined) updateFields.city = city;
-    if (expectations !== undefined) updateFields.expectations = expectations;
-    if (createProfileFor !== undefined)
-      updateFields.createProfileFor = createProfileFor;
-    if (contactPersonName !== undefined)
-      updateFields.contactPersonName = contactPersonName;
-    if (req.body.houseType !== undefined)
-      updateFields.houseType = req.body.houseType;
-    if (req.body.priceRange !== undefined)
-      updateFields.priceRange = req.body.priceRange;
-    if (req.body.prefferedPlace !== undefined)
-      updateFields.prefferedPlace = req.body.prefferedPlace;
-    if (req.body.caste !== undefined) updateFields.caste = req.body.caste;
-    if (req.body.passportNo !== undefined)
-      updateFields.passportNo = req.body.passportNo;
-    if (req.body.aadharId !== undefined)
-      updateFields.aadharId = req.body.aadharId;
-    if (req.body.prefferedSalary !== undefined)
-      updateFields.prefferedSalary = req.body.prefferedSalary;
-    if (req.body.visaType !== undefined)
-      updateFields.visaType = req.body.visaType;
-    if (req.body.prefferedCourse !== undefined)
-      updateFields.prefferedCourse = req.body.prefferedCourse;
-    if (status !== undefined) updateFields.status = status;
-    if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
+    // Build update object
+    const updateFields: any = {
+      name,
+      mobile,
+      whatsapp,
+      altMobNumber,
+      preferCountry,
+      preferJobs,
+      job,
+      searchedHouses,
+      gender,
+      dateOfBirth,
+      maritalStatus,
+      religion,
+      education,
+      jobType,
+      monthlyIncome,
+      spokenLanguage,
+      district,
+      city,
+      expectations,
+      createProfileFor,
+      contactPersonName,
+      status,
+      profilePhoto,
+    };
 
-    const recordIdToUpdate = _id || existingRecord._id;
+    // remove undefined values
+    Object.keys(updateFields).forEach(
+      (key) => updateFields[key] === undefined && delete updateFields[key]
+    );
 
     const updatedRecord = await Data.findByIdAndUpdate(
       recordIdToUpdate,
-      updateFields,
-      {
-        new: true,
-        runValidators: true,
-      }
+      { $set: updateFields },
+      { new: true, runValidators: true }
     );
 
-    console.log(
-      "Updating record:",
-      recordIdToUpdate,
-      "with photo:",
-      profilePhoto
-    );
-
-    // Update FormTracking currentStep and status
-    if (step !== undefined) {
-      form.currentStep = step;
-    }
-    if (step === 3) {
-      form.status = "submitted";
-    }
+    // Update form progress
+    if (step !== undefined) form.currentStep = step;
+    if (step === 3) form.status = "submitted";
     await form.save();
+
     return res.status(200).json({
       success: true,
       message: "Form updated successfully",
@@ -881,6 +838,7 @@ export const updateForm = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const updateRow = async (req: Request, res: Response) => {
   try {
@@ -1151,11 +1109,13 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     }
 
     // 🔹 Date range filter
-    const isValidDate = (d: string): boolean => !!d && !isNaN(new Date(d).getTime());
+    const isValidDate = (d: string): boolean =>
+      !!d && !isNaN(new Date(d).getTime());
     if (isValidDate(startDate) || isValidDate(endDate)) {
       const dateFilter: any = {};
       if (isValidDate(startDate)) dateFilter.$gte = new Date(startDate);
-      if (isValidDate(endDate)) dateFilter.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
+      if (isValidDate(endDate))
+        dateFilter.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
       query.createdAt = dateFilter;
     }
 
@@ -1281,8 +1241,6 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     });
   }
 };
-
-
 
 // Staff-specific update functions that verify data ownership
 export const updateStaffDataStatus = async (req: Request, res: Response) => {
