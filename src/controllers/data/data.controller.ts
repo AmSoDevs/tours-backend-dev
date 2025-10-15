@@ -16,16 +16,6 @@ export const importData = async (req: Request, res: Response) => {
   try {
     const { dataType, data } = req.body;
 
-    const existingNonNumericSlNo = await Data.findOne({
-      slNo: { $not: /^\d{6}$/ },
-    });
-
-    if (existingNonNumericSlNo) {
-      console.log(
-        "Warning: Found existing records with non-numeric slNo. These may cause conflicts."
-      );
-    }
-
     if (!dataType || !data || !Array.isArray(data)) {
       return res.status(400).json({
         success: false,
@@ -33,11 +23,7 @@ export const importData = async (req: Request, res: Response) => {
       });
     }
 
-    const staffMembers = await Staff.find({
-      isDeleted: false,
-      isActive: true,
-    }).select("_id");
-
+    const staffMembers = await Staff.find({ isDeleted: false, isActive: true }).select("_id");
     if (staffMembers.length === 0) {
       return res.status(400).json({
         success: false,
@@ -49,17 +35,16 @@ export const importData = async (req: Request, res: Response) => {
       totalRecords: data.length,
       importedRecords: 0,
       duplicateRecords: 0,
+      skippedRecords: 0,
       errors: [] as string[],
     };
 
     const batchSize = 100;
     const batches = [];
-
     for (let i = 0; i < data.length; i += batchSize) {
       batches.push(data.slice(i, i + batchSize));
     }
 
-    // Initialize staff assignment tracking
     let staffAssignment = await StaffAssignment.findOne();
     if (!staffAssignment) {
       staffAssignment = new StaffAssignment({
@@ -70,11 +55,8 @@ export const importData = async (req: Request, res: Response) => {
     }
 
     for (const batch of batches) {
-      for (let index = 0; index < batch.length; index++) {
-        const record = batch[index];
-
+      for (const record of batch) {
         try {
-          // Build duplicate check query with proper null handling
           const duplicateQuery: any[] = [];
 
           if (record.mobile) {
@@ -87,32 +69,31 @@ export const importData = async (req: Request, res: Response) => {
             duplicateQuery.push({ refferenceNumber: record.refferenceNumber });
           }
 
-          const existingRecord =
-            duplicateQuery.length > 0
-              ? await Data.findOne(
-                  record.data?.toLowerCase() === "visa"
-                    ? { $or: duplicateQuery } // 🔥 For visa, check globally
-                    : { $or: duplicateQuery, data: record.data } // For others, check within same type
-                )
-              : null;
+          let existingRecord = null;
+          if (duplicateQuery.length > 0) {
+            existingRecord = await Data.findOne(
+              record.data?.toLowerCase() === "visa"
+                ? { $or: duplicateQuery } // 🔥 global check for visa
+                : { $or: duplicateQuery, data: dataType } // check only within same data type
+            );
+          }
 
           if (existingRecord) {
             results.duplicateRecords++;
-            continue;
+            continue; // skip duplicate
           }
 
-          // Use helper function to assign staff for non-duplicate records only
+          // assign staff
           const { assignedStaffId, staffAssignment: updatedStaffAssignment } =
             await assignStaffWithRotation(staffMembers);
-          const assignedStaff = assignedStaffId;
           staffAssignment = updatedStaffAssignment;
 
           const slNo = await generateUniqueSlNo();
           const profileId = await generateUniqueProfileId();
 
           const newData = new Data({
-            slNo: slNo,
-            profileId: profileId,
+            slNo,
+            profileId,
             data: dataType,
             dataType: record?.dataType || "",
             verified: record.verified || "",
@@ -122,22 +103,21 @@ export const importData = async (req: Request, res: Response) => {
             refferenceNumber: record.refferenceNumber || "",
             refferenceName: record.refferenceName || "",
             remarkSecond: record.remarkSecond || "",
-            assignedStaff: assignedStaff,
+            assignedStaff: assignedStaffId,
           });
 
           await newData.save();
           results.importedRecords++;
         } catch (error: any) {
-          console.error("Error processing record:", record.slNo, error);
-          const errorMessage = `Error processing record ${record.slNo}: ${error.message}`;
-          results.errors.push(errorMessage);
+          console.error("Error processing record:", record, error);
+          results.errors.push(`Error processing record ${record.mobile || "N/A"}: ${error.message}`);
         }
       }
     }
 
     return res.status(200).json({
       success: true,
-      message: "Data import completed",
+      message: "Data import completed successfully",
       results,
     });
   } catch (error: any) {
@@ -149,6 +129,7 @@ export const importData = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const getData = async (req: Request, res: Response) => {
   try {
@@ -1137,51 +1118,48 @@ export const updateRow = async (req: Request, res: Response) => {
 export const getStaffAssignedData = async (req: Request, res: Response) => {
   try {
     const { id: staffId } = req.params;
-    const {
-      page = 1,
-      limit,
-      dataType,
-      status,
-      data: dataFilter,
-      search,
-      sortBy = "createdAt",
-      sortOrder = "desc",
-      startDate,
-      endDate,
-    } = req.query;
+
+    // 🔹 Safely cast all query params to string
+    const page = Number(req.query.page) || 1;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const dataType = String(req.query.dataType || "");
+    const status = String(req.query.status || "");
+    const dataFilter = String(req.query.data || "");
+    const search = String(req.query.search || "");
+    const sortBy = String(req.query.sortBy || "createdAt");
+    const sortOrder = String(req.query.sortOrder || "desc");
+    const startDate = String(req.query.startDate || "");
+    const endDate = String(req.query.endDate || "");
+    const type = String(req.query.type || "all");
 
     const query: any = {
       isDeleted: false,
       assignedStaff: staffId,
     };
 
-    // Apply filters
+    // 🔹 Apply filters
     if (dataType && dataType !== "all") {
       query.dataType = { $regex: dataType, $options: "i" };
     }
+
     if (status && status !== "all") {
       query.status = { $regex: status, $options: "i" };
-    } else if (status === "all" || !status) {
-      query.status = { $in: [null, "", undefined] };
     }
+
     if (dataFilter && dataFilter !== "all") {
       query.data = { $regex: dataFilter, $options: "i" };
     }
 
-     const isValidDate = (d: string | undefined): boolean =>
-      !!d && !isNaN(new Date(d).getTime());
-
-    if (isValidDate(startDate as string) || isValidDate(endDate as string)) {
+    // 🔹 Date range filter
+    const isValidDate = (d: string): boolean => !!d && !isNaN(new Date(d).getTime());
+    if (isValidDate(startDate) || isValidDate(endDate)) {
       const dateFilter: any = {};
-      if (isValidDate(startDate as string))
-        dateFilter.$gte = new Date(startDate as string);
-      if (isValidDate(endDate as string))
-        dateFilter.$lte = new Date(
-          new Date(endDate as string).setHours(23, 59, 59, 999)
-        );
+      if (isValidDate(startDate)) dateFilter.$gte = new Date(startDate);
+      if (isValidDate(endDate)) dateFilter.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
       query.createdAt = dateFilter;
     }
-    
+
+    // 🔹 Search logic
     if (search && search !== "") {
       const searchRegex = { $regex: search, $options: "i" };
       query.$or = [
@@ -1195,58 +1173,103 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       ];
     }
 
-    // Build sort object
+    // 🔹 Sorting
     const sortObj: any = {};
-    if (sortBy === "createdAt") {
-      sortObj.createdAt = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "updatedAt") {
-      sortObj.updatedAt = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "name") {
-      sortObj.name = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "mobile") {
-      sortObj.mobile = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "status") {
-      sortObj.status = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "slNo") {
-      sortObj.slNo = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "assignedStaff.staffId") {
-      sortObj["assignedStaff.staffId"] = sortOrder === "desc" ? -1 : 1;
+    const sortFieldMap: any = {
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      name: "name",
+      mobile: "mobile",
+      status: "status",
+      slNo: "slNo",
+      "assignedStaff.staffId": "assignedStaff.staffId",
+    };
+    const field = sortFieldMap[sortBy] || "createdAt";
+    sortObj[field] = sortOrder === "desc" ? -1 : 1;
+
+    // 🔹 Pagination
+    const skip = (page - 1) * (limit || 0);
+
+    const data = await Data.find(query)
+      .populate("assignedStaff", "name staffId")
+      .sort(sortObj)
+      .skip(skip)
+      .limit(limit ? limit : 0);
+
+    const total = await Data.countDocuments(query);
+    const pagination = {
+      currentPage: page,
+      totalPages: limit ? Math.ceil(total / limit) : 1,
+      totalRecords: total,
+      limit: limit || total,
+    };
+
+    // 🔹 Add flags: isBulk, isRegister, isReferenceRegistered, isBulkRegistered
+    const updatedData = await Promise.all(
+      data.map(async (record: any) => {
+        const dataType = record.data?.toLowerCase() || "";
+        const isBulk = dataType === "bulk";
+        const isRegister = dataType === "register";
+
+        const mobile = String(record.mobile || "").trim();
+        const referenceNumber = String(record.refferenceNumber || "").trim();
+
+        let isReferenceRegistered = false;
+        let isBulkRegistered = false;
+
+        if (referenceNumber) {
+          const registeredRef = await Data.findOne({
+            $or: [
+              { mobile: referenceNumber },
+              { refferenceNumber: referenceNumber },
+            ],
+            data: "register",
+            isDeleted: false,
+          });
+          if (registeredRef) isReferenceRegistered = true;
+        }
+
+        if (mobile) {
+          const selfRegistered = await Data.findOne({
+            $or: [{ mobile }, { refferenceNumber: mobile }],
+            data: "register",
+            isDeleted: false,
+          });
+          if (selfRegistered) isBulkRegistered = true;
+        }
+
+        return {
+          ...record.toObject(),
+          isBulk,
+          isRegister,
+          isReferenceRegistered,
+          isBulkRegistered,
+        };
+      })
+    );
+
+    // 🔹 Apply type filter logic (new/old)
+    let filteredData = updatedData;
+    if (type === "old") {
+      filteredData = updatedData.filter(
+        (r) => r.isBulk && r.isReferenceRegistered && !r.isBulkRegistered
+      );
+    } else if (type === "new") {
+      filteredData = updatedData.filter(
+        (r) => r.isBulk && !r.isReferenceRegistered && !r.isBulkRegistered
+      );
     }
 
-    let data;
-    let total;
-    let pagination;
-
-    if (limit) {
-      const skip = (Number(page) - 1) * Number(limit);
-      data = await Data.find(query)
-        .populate("assignedStaff", "name staffId")
-        .sort(sortObj)
-        .skip(skip)
-        .limit(Number(limit));
-      total = await Data.countDocuments(query);
-      pagination = {
-        currentPage: Number(page),
-        totalPages: Math.ceil(total / Number(limit)),
-        totalRecords: total,
-        limit: Number(limit),
-      };
-    } else {
-      data = await Data.find(query)
-        .populate("assignedStaff", "name staffId")
-        .sort(sortObj);
-      total = data.length;
-      pagination = {
-        currentPage: 1,
-        totalPages: 1,
-        totalRecords: total,
-        limit: total,
-      };
+    // 🔹 Status filter (apply last to include flags)
+    if (status && status.toLowerCase() !== "all") {
+      filteredData = filteredData.filter(
+        (r) => r.status?.toLowerCase() === status.toLowerCase()
+      );
     }
 
     return res.status(200).json({
       success: true,
-      data,
+      data: filteredData,
       pagination,
     });
   } catch (error: any) {
@@ -1258,6 +1281,8 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     });
   }
 };
+
+
 
 // Staff-specific update functions that verify data ownership
 export const updateStaffDataStatus = async (req: Request, res: Response) => {
