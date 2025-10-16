@@ -569,6 +569,9 @@ export const submitForm = async (req: Request, res: Response) => {
       createProfileFor,
       contactPersonName,
       trackingId,
+      lookingFor,
+      star,
+      typeOfJathakam,
     } = req.body;
 
     if (!name || !mobile) {
@@ -669,6 +672,9 @@ export const submitForm = async (req: Request, res: Response) => {
       prefferedSalary: req.body.prefferedSalary,
       visaType: req.body.visaType,
       prefferedCourse: req.body.prefferedCourse,
+      lookingFor,
+      star,
+      typeOfJathakam,
       assignedStaff,
       isDeleted: false,
     });
@@ -705,7 +711,6 @@ export const submitForm = async (req: Request, res: Response) => {
   }
 };
 
-
 export const updateForm = async (req: Request, res: Response) => {
   try {
     const {
@@ -734,6 +739,9 @@ export const updateForm = async (req: Request, res: Response) => {
       step,
       status,
       profilePhoto,
+      lookingFor,
+      star,
+      typeOfJathakam,
     } = req.body;
 
     if (!trackingId) {
@@ -805,6 +813,9 @@ export const updateForm = async (req: Request, res: Response) => {
         createProfileFor,
         contactPersonName,
         profilePhoto,
+        lookingFor,
+        star,
+        typeOfJathakam,
         data: form.formType,
         refferenceNumber: mobile,
       });
@@ -887,7 +898,6 @@ export const updateForm = async (req: Request, res: Response) => {
   }
 };
 
-
 export const updateRow = async (req: Request, res: Response) => {
   try {
     const {
@@ -930,8 +940,9 @@ export const updateRow = async (req: Request, res: Response) => {
       job,
       visaType,
       houseType,
-      typeOfJathakam,
       star,
+      typeOfJathakam,
+      lookingFor,
       prefferedPlace,
       prefferedSalary,
       prefferedCourse,
@@ -963,7 +974,8 @@ export const updateRow = async (req: Request, res: Response) => {
       (mobile && mobile !== existingRecord.mobile) ||
       (whatsapp && whatsapp !== existingRecord.whatsapp) ||
       (altMobNumber && altMobNumber !== existingRecord.altMobNumber) ||
-      (refferenceNumber && refferenceNumber !== existingRecord.refferenceNumber);
+      (refferenceNumber &&
+        refferenceNumber !== existingRecord.refferenceNumber);
 
     // ✅ 3. Duplicate check only when any number changed
     if (hasChanged) {
@@ -1067,6 +1079,7 @@ export const updateRow = async (req: Request, res: Response) => {
       houseType,
       typeOfJathakam,
       star,
+      lookingFor,
       prefferedPlace,
       prefferedSalary,
       prefferedCourse,
@@ -1101,7 +1114,7 @@ export const updateRow = async (req: Request, res: Response) => {
       data: updatedRecord,
     });
   } catch (error: any) {
-    console.error("❌ Error updating row:", error);
+    console.error(" Error updating row:", error);
 
     const extractErrorMessage = (error: any): string => {
       if (!error) return "Unknown error";
@@ -1129,7 +1142,6 @@ export const updateRow = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 export const getStaffAssignedData = async (req: Request, res: Response) => {
   try {
@@ -1671,6 +1683,9 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       jobType,
       preferJobs,
       religion,
+      star,
+      typeOfJathakam,
+      lookingFor,
       monthlyIncome,
       searchedHouses,
       maritalStatus,
@@ -1817,6 +1832,10 @@ export const updateStaffRow = async (req: Request, res: Response) => {
     if (processing !== undefined) updateFields.processing = processing;
     if (serDate !== undefined) updateFields.serDate = serDate;
     if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
+    if (star !== undefined) updateFields.star = star;
+    if (typeOfJathakam !== undefined)
+      updateFields.typeOfJathakam = typeOfJathakam;
+    if (lookingFor !== undefined) updateFields.lookingFor = lookingFor;
 
     // Update the record
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {

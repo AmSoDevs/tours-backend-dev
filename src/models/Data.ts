@@ -43,8 +43,9 @@ export interface DataDocument extends Document {
   priceRange?: string;
   prefferedPlace?: string;
   caste?: string;
-  typeOfJathakam?: string;
-  star?: string;
+  star?: String;
+  typeOfJathakam?: String;
+  lookingFor?: String;
   prefferedSalary?: string;
   visaType?: string;
   prefferedCourse?: string;
@@ -72,12 +73,12 @@ export interface DataDocument extends Document {
 const DataSchema = new Schema<DataDocument>(
   {
     slNo: { type: String, required: true },
-    profileId: { type: String},
-    dataType: { type: String},
+    profileId: { type: String },
+    dataType: { type: String },
     data: { type: String },
     verified: { type: String },
     mobile: { type: String, required: true },
-    altMobNumber: { type: String},
+    altMobNumber: { type: String },
     name: { type: String },
     remarkFirst: { type: String },
     status: { type: String },
@@ -117,6 +118,9 @@ const DataSchema = new Schema<DataDocument>(
     priceRange: { type: String },
     prefferedPlace: { type: String },
     caste: { type: String },
+    star: { type: String },
+    typeOfJathakam: { type: String },
+    lookingFor: { type: String },
     prefferedSalary: { type: String },
     visaType: { type: String },
     prefferedCourse: { type: String },
@@ -142,7 +146,6 @@ const DataSchema = new Schema<DataDocument>(
     serDate: { type: String },
     profilePhoto: { type: String },
     files: [{ type: Schema.Types.ObjectId, ref: "Files" }],
-
   },
   { timestamps: true }
 );
