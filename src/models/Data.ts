@@ -43,9 +43,9 @@ export interface DataDocument extends Document {
   priceRange?: string;
   prefferedPlace?: string;
   caste?: string;
-  star?: String;
-  typeOfJathakam?: String;
-  lookingFor?: String;
+  star?: string;
+  typeOfJathakam?: string;
+  lookingFor?: string;
   prefferedSalary?: string;
   visaType?: string;
   prefferedCourse?: string;
