@@ -16,16 +16,6 @@ export const importData = async (req: Request, res: Response) => {
   try {
     const { dataType, data } = req.body;
 
-    const existingNonNumericSlNo = await Data.findOne({
-      slNo: { $not: /^\d{6}$/ },
-    });
-
-    if (existingNonNumericSlNo) {
-      console.log(
-        "Warning: Found existing records with non-numeric slNo. These may cause conflicts."
-      );
-    }
-
     if (!dataType || !data || !Array.isArray(data)) {
       return res.status(400).json({
         success: false,
@@ -37,7 +27,6 @@ export const importData = async (req: Request, res: Response) => {
       isDeleted: false,
       isActive: true,
     }).select("_id");
-
     if (staffMembers.length === 0) {
       return res.status(400).json({
         success: false,
@@ -49,17 +38,16 @@ export const importData = async (req: Request, res: Response) => {
       totalRecords: data.length,
       importedRecords: 0,
       duplicateRecords: 0,
+      skippedRecords: 0,
       errors: [] as string[],
     };
 
     const batchSize = 100;
     const batches = [];
-
     for (let i = 0; i < data.length; i += batchSize) {
       batches.push(data.slice(i, i + batchSize));
     }
 
-    // Initialize staff assignment tracking
     let staffAssignment = await StaffAssignment.findOne();
     if (!staffAssignment) {
       staffAssignment = new StaffAssignment({
@@ -70,11 +58,8 @@ export const importData = async (req: Request, res: Response) => {
     }
 
     for (const batch of batches) {
-      for (let index = 0; index < batch.length; index++) {
-        const record = batch[index];
-
+      for (const record of batch) {
         try {
-          // Build duplicate check query with proper null handling
           const duplicateQuery: any[] = [];
 
           if (record.mobile) {
@@ -87,32 +72,31 @@ export const importData = async (req: Request, res: Response) => {
             duplicateQuery.push({ refferenceNumber: record.refferenceNumber });
           }
 
-          const existingRecord =
-            duplicateQuery.length > 0
-              ? await Data.findOne(
-                  record.data?.toLowerCase() === "visa"
-                    ? { $or: duplicateQuery } // 🔥 For visa, check globally
-                    : { $or: duplicateQuery, data: record.data } // For others, check within same type
-                )
-              : null;
+          let existingRecord = null;
+          if (duplicateQuery.length > 0) {
+            existingRecord = await Data.findOne(
+              record.data?.toLowerCase() === "visa"
+                ? { $or: duplicateQuery } // 🔥 global check for visa
+                : { $or: duplicateQuery, data: dataType } // check only within same data type
+            );
+          }
 
           if (existingRecord) {
             results.duplicateRecords++;
-            continue;
+            continue; // skip duplicate
           }
 
-          // Use helper function to assign staff for non-duplicate records only
+          // assign staff
           const { assignedStaffId, staffAssignment: updatedStaffAssignment } =
             await assignStaffWithRotation(staffMembers);
-          const assignedStaff = assignedStaffId;
           staffAssignment = updatedStaffAssignment;
 
           const slNo = await generateUniqueSlNo();
           const profileId = await generateUniqueProfileId();
 
           const newData = new Data({
-            slNo: slNo,
-            profileId: profileId,
+            slNo,
+            profileId,
             data: dataType,
             dataType: record?.dataType || "",
             verified: record.verified || "",
@@ -122,22 +106,25 @@ export const importData = async (req: Request, res: Response) => {
             refferenceNumber: record.refferenceNumber || "",
             refferenceName: record.refferenceName || "",
             remarkSecond: record.remarkSecond || "",
-            assignedStaff: assignedStaff,
+            assignedStaff: assignedStaffId,
           });
 
           await newData.save();
           results.importedRecords++;
         } catch (error: any) {
-          console.error("Error processing record:", record.slNo, error);
-          const errorMessage = `Error processing record ${record.slNo}: ${error.message}`;
-          results.errors.push(errorMessage);
+          console.error("Error processing record:", record, error);
+          results.errors.push(
+            `Error processing record ${record.mobile || "N/A"}: ${
+              error.message
+            }`
+          );
         }
       }
     }
 
     return res.status(200).json({
       success: true,
-      message: "Data import completed",
+      message: "Data import completed successfully",
       results,
     });
   } catch (error: any) {
@@ -727,6 +714,7 @@ export const submitForm = async (req: Request, res: Response) => {
 export const updateForm = async (req: Request, res: Response) => {
   try {
     const {
+      trackingId,
       name,
       mobile,
       whatsapp,
@@ -751,148 +739,146 @@ export const updateForm = async (req: Request, res: Response) => {
       step,
       status,
       profilePhoto,
-      trackingId,
-      _id,
     } = req.body;
 
-    // Validate required fields
-    if (!name || !mobile) {
+    if (!trackingId) {
       return res.status(400).json({
         success: false,
-        message: "Name and mobile number are required.",
+        message: "Tracking ID is required.",
       });
     }
+
+    // ✅ 1️⃣ Find the FormTracking record
     const form = await FormTracking.findOne({ trackingId });
     if (!form) {
       return res.status(400).json({
         success: false,
-        message: "Invalid form id",
+        message: "Invalid form tracking ID.",
       });
     }
-    // const existingRecord = await Data.findOne({
-    //   $or: [{ mobile: mobile }, { refferenceNumber: mobile },{data:form?.formType}],
-    // });
-    const existingRecord = await Data.findOne({
-      $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-    });
-    if (!existingRecord) {
+
+    const allowMultiple = form.allowMultiple || false;
+
+    // ✅ 2️⃣ Try to find an existing Data record
+    let recordToUpdate = null;
+
+    // If allowMultiple = false, we always use the one linked to form
+    if (!allowMultiple && form.dataId) {
+      recordToUpdate = await Data.findById(form.dataId);
+    }
+
+    // If allowMultiple = true, find by mobile and form type
+    if (allowMultiple) {
+      recordToUpdate = await Data.findOne({
+        $and: [
+          { mobile: mobile },
+          { data: form.formType },
+        ],
+      });
+    }
+
+    // ✅ 3️⃣ If no record found and allowMultiple is true → create new one
+    if (!recordToUpdate && allowMultiple) {
+      const newData = new Data({
+        name,
+        mobile,
+        whatsapp,
+        altMobNumber,
+        preferCountry,
+        preferJobs,
+        job,
+        searchedHouses,
+        gender,
+        dateOfBirth,
+        maritalStatus,
+        religion,
+        education,
+        jobType,
+        monthlyIncome,
+        spokenLanguage,
+        district,
+        city,
+        expectations,
+        createProfileFor,
+        contactPersonName,
+        profilePhoto,
+        data: form.formType,
+        refferenceNumber: mobile, // optional link
+      });
+
+      await newData.save();
+
+      // Optionally link new record if single mode
+      if (!allowMultiple) {
+        form.dataId = newData._id;
+        form.status = "in_progress";
+        await form.save();
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "New record created successfully (multiple mode).",
+        data: newData,
+      });
+    }
+
+    // ✅ 4️⃣ If record exists → update it
+    if (!recordToUpdate) {
       return res.status(404).json({
         success: false,
-        message: "Record not found. Please submit the form first.",
+        message: "No existing record found to update. Please submit the form first.",
       });
     }
-    // if (mobile !== undefined && mobile !== "") {
-    //   // Check if mobile is same as existing reference number in this record
-    //   if (
-    //     existingRecord.refferenceNumber &&
-    //     mobile === existingRecord.refferenceNumber
-    //   ) {
-    //     return res.status(400).json({
-    //       success: false,
-    //       message:
-    //         "Mobile number cannot be the same as the existing reference number in this record.",
-    //     });
-    //   }
 
-    //   // Check for duplicate mobile numbers in OTHER records (same form type only)
-    //   const duplicateCheckQuery = {
-    //     _id: { $ne: _id }, // Exclude the current record being updated
-    //     $and: [
-    //       {
-    //         $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-    //       },
-    //       { data: form?.formType }, // Only check within same form type
-    //     ],
-    //   };
+    const updateFields: Record<string, any> = {
+      name,
+      mobile,
+      whatsapp,
+      altMobNumber,
+      preferCountry,
+      preferJobs,
+      job,
+      searchedHouses,
+      gender,
+      dateOfBirth,
+      maritalStatus,
+      religion,
+      education,
+      jobType,
+      monthlyIncome,
+      spokenLanguage,
+      district,
+      city,
+      expectations,
+      createProfileFor,
+      contactPersonName,
+      profilePhoto,
+      status,
+    };
 
-    //   const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-    //   if (duplicateRecord) {
-    //     return res.status(400).json({
-    //       success: false,
-    //       message:
-    //         "Mobile number or reference number already exists in another record.",
-    //     });
-    //   }
-    // }
-    const updateFields: any = {};
-    if (name !== undefined) updateFields.name = name;
-    if (mobile !== undefined) updateFields.mobile = mobile;
-    if (whatsapp !== undefined) updateFields.whatsapp = whatsapp;
-    if (altMobNumber !== undefined) updateFields.altMobNumber = altMobNumber;
-    if (preferCountry !== undefined) updateFields.preferCountry = preferCountry;
-    if (preferJobs !== undefined) updateFields.preferJobs = preferJobs;
-    if (job !== undefined) updateFields.job = job;
-    if (searchedHouses !== undefined)
-      updateFields.searchedHouses = searchedHouses;
-    if (gender !== undefined) updateFields.gender = gender;
-    if (dateOfBirth !== undefined) updateFields.dateOfBirth = dateOfBirth;
-    if (maritalStatus !== undefined) updateFields.maritalStatus = maritalStatus;
-    if (religion !== undefined) updateFields.religion = religion;
-    if (education !== undefined) updateFields.education = education;
-    if (jobType !== undefined) updateFields.jobType = jobType;
-    if (monthlyIncome !== undefined) updateFields.monthlyIncome = monthlyIncome;
-    if (spokenLanguage !== undefined)
-      updateFields.spokenLanguage = spokenLanguage;
-    if (district !== undefined) updateFields.district = district;
-    if (city !== undefined) updateFields.city = city;
-    if (expectations !== undefined) updateFields.expectations = expectations;
-    if (createProfileFor !== undefined)
-      updateFields.createProfileFor = createProfileFor;
-    if (contactPersonName !== undefined)
-      updateFields.contactPersonName = contactPersonName;
-    if (req.body.houseType !== undefined)
-      updateFields.houseType = req.body.houseType;
-    if (req.body.priceRange !== undefined)
-      updateFields.priceRange = req.body.priceRange;
-    if (req.body.prefferedPlace !== undefined)
-      updateFields.prefferedPlace = req.body.prefferedPlace;
-    if (req.body.caste !== undefined) updateFields.caste = req.body.caste;
-    if (req.body.passportNo !== undefined)
-      updateFields.passportNo = req.body.passportNo;
-    if (req.body.aadharId !== undefined)
-      updateFields.aadharId = req.body.aadharId;
-    if (req.body.prefferedSalary !== undefined)
-      updateFields.prefferedSalary = req.body.prefferedSalary;
-    if (req.body.visaType !== undefined)
-      updateFields.visaType = req.body.visaType;
-    if (req.body.prefferedCourse !== undefined)
-      updateFields.prefferedCourse = req.body.prefferedCourse;
-    if (status !== undefined) updateFields.status = status;
-    if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
-
-    const recordIdToUpdate = _id || existingRecord._id;
+    // Remove undefined
+    Object.keys(updateFields).forEach((k) => {
+      if (updateFields[k] === undefined) delete updateFields[k];
+    });
 
     const updatedRecord = await Data.findByIdAndUpdate(
-      recordIdToUpdate,
-      updateFields,
-      {
-        new: true,
-        runValidators: true,
-      }
+      recordToUpdate._id,
+      { $set: updateFields },
+      { new: true, runValidators: true }
     );
 
-    console.log(
-      "Updating record:",
-      recordIdToUpdate,
-      "with photo:",
-      profilePhoto
-    );
+    // ✅ 5️⃣ Update form tracking progress
+    if (step !== undefined) form.currentStep = step;
+    if (step === 3) form.status = "submitted";
+    if (!allowMultiple) await form.save();
 
-    // Update FormTracking currentStep and status
-    if (step !== undefined) {
-      form.currentStep = step;
-    }
-    if (step === 3) {
-      form.status = "submitted";
-    }
-    await form.save();
     return res.status(200).json({
       success: true,
       message: "Form updated successfully",
       data: updatedRecord,
     });
   } catch (error: any) {
-    console.error("Error updating form:", error);
+    console.error("Error in updateForm:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error while updating form",
@@ -960,17 +946,24 @@ export const updateRow = async (req: Request, res: Response) => {
       });
     }
 
-    const existingRecord = await Data.findOne({
-      $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-    });
-
+    // ✅ 1. Fetch existing record
+    const existingRecord = await Data.findById(id);
     if (!existingRecord) {
       return res.status(404).json({
         success: false,
         message: "Record not found. Please submit the form first.",
       });
     }
-    if (mobile !== undefined || refferenceNumber !== undefined) {
+
+    // ✅ 2. Check if mobile/reference actually changed
+    const isMobileChanged =
+      mobile !== undefined && mobile !== existingRecord.mobile;
+    const isReferenceChanged =
+      refferenceNumber !== undefined &&
+      refferenceNumber !== existingRecord.refferenceNumber;
+
+    // ✅ 3. Duplicate check only when changed
+    if (isMobileChanged || isReferenceChanged) {
       if (
         mobile !== undefined &&
         refferenceNumber !== undefined &&
@@ -982,35 +975,7 @@ export const updateRow = async (req: Request, res: Response) => {
         });
       }
 
-      if (
-        mobile !== undefined &&
-        existingRecord.refferenceNumber &&
-        mobile === existingRecord.refferenceNumber
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Mobile number cannot be the same as the existing reference number in this record.",
-        });
-      }
-
-      if (
-        refferenceNumber !== undefined &&
-        existingRecord.mobile &&
-        refferenceNumber === existingRecord.mobile
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Reference number cannot be the same as the existing mobile number in this record.",
-        });
-      }
-
-      const duplicateCheckQuery: {
-        _id: { $ne: string };
-        $or: Record<string, any>[];
-        data?: string;
-      } = {
+      const duplicateCheckQuery: any = {
         _id: { $ne: id },
         $or: [],
       };
@@ -1020,22 +985,22 @@ export const updateRow = async (req: Request, res: Response) => {
         duplicateCheckQuery.data = existingRecord?.data;
       }
 
-      if (mobile !== undefined && mobile !== "") {
+      if (mobile) {
         duplicateCheckQuery.$or.push(
           { mobile: mobile },
           { refferenceNumber: mobile }
         );
       }
 
-      if (refferenceNumber !== undefined && refferenceNumber !== "") {
+      if (refferenceNumber) {
         duplicateCheckQuery.$or.push(
           { mobile: refferenceNumber },
           { refferenceNumber: refferenceNumber }
         );
       }
+
       if (duplicateCheckQuery.$or.length > 0) {
         const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-
         if (duplicateRecord) {
           return res.status(400).json({
             success: false,
@@ -1046,78 +1011,74 @@ export const updateRow = async (req: Request, res: Response) => {
       }
     }
 
+    // ✅ 4. Prepare update fields (TS safe)
+    const fields: Record<string, any> = {
+      mobile,
+      altMobNumber,
+      name,
+      status,
+      remarkFirst,
+      remarkSecond,
+      verified,
+      dataType,
+      dateOfBirth,
+      refferenceNumber,
+      refferenceName,
+      regPayment,
+      serPayment,
+      contactPersonName,
+      regReceived,
+      serReceived,
+      regBalance,
+      serBalance,
+      passportNo,
+      vSampleSend,
+      expectations,
+      district,
+      education,
+      preferCountry,
+      city,
+      jobType,
+      preferJobs,
+      religion,
+      monthlyIncome,
+      searchedHouses,
+      maritalStatus,
+      spokenLanguage,
+      processing,
+      serDate,
+      caste,
+      job,
+      visaType,
+      houseType,
+      typeOfJathakam,
+      star,
+      prefferedPlace,
+      prefferedSalary,
+      prefferedCourse,
+      priceRange,
+      profilePhoto,
+      aadharId,
+    };
+
     const updateFields: any =
       dataControllerHooks.managetRegistrationPaymentUpdate(
         existingRecord,
         req.body
       );
 
-    if (mobile !== undefined) updateFields.mobile = mobile;
-    if (altMobNumber !== undefined) updateFields.altMobNumber = altMobNumber;
-    if (name !== undefined) updateFields.name = name;
-    if (status !== undefined) updateFields.status = status;
-    if (remarkFirst !== undefined) updateFields.remarkFirst = remarkFirst;
-    if (remarkSecond !== undefined) updateFields.remarkSecond = remarkSecond;
-    if (verified !== undefined) updateFields.verified = verified;
-    if (dataType !== undefined) updateFields.dataType = dataType;
-    if (dateOfBirth !== undefined) updateFields.dateOfBirth = dateOfBirth;
-    if (refferenceNumber !== undefined)
-      updateFields.refferenceNumber = refferenceNumber;
-    if (refferenceName !== undefined)
-      updateFields.refferenceName = refferenceName;
-
-    if (regPayment !== undefined) updateFields.regPayment = regPayment;
-    if (serPayment !== undefined) updateFields.serPayment = serPayment;
-    if (contactPersonName !== undefined)
-      updateFields.contactPersonName = contactPersonName;
-    if (regReceived !== undefined) updateFields.regReceived = regReceived;
-    if (serReceived !== undefined) updateFields.serReceived = serReceived;
-    if (regBalance !== undefined) updateFields.regBalance = regBalance;
-    if (serBalance !== undefined) updateFields.serBalance = serBalance;
-    if (passportNo !== undefined) updateFields.passportNo = passportNo;
-    if (vSampleSend !== undefined) updateFields.vSampleSend = vSampleSend;
-    if (expectations !== undefined) updateFields.expectations = expectations;
-    if (district !== undefined) updateFields.district = district;
-    if (education !== undefined) updateFields.education = education;
-    if (preferCountry !== undefined) updateFields.preferCountry = preferCountry;
-    if (city !== undefined) updateFields.city = city;
-    if (jobType !== undefined) updateFields.jobType = jobType;
-    if (preferJobs !== undefined) updateFields.preferJobs = preferJobs;
-    if (religion !== undefined) updateFields.religion = religion;
-    if (monthlyIncome !== undefined) updateFields.monthlyIncome = monthlyIncome;
-    if (searchedHouses !== undefined)
-      updateFields.searchedHouses = searchedHouses;
-    if (maritalStatus !== undefined) updateFields.maritalStatus = maritalStatus;
-    if (spokenLanguage !== undefined)
-      updateFields.spokenLanguage = spokenLanguage;
-    if (processing !== undefined) updateFields.processing = processing;
-    if (serDate !== undefined) updateFields.serDate = serDate;
-    if (caste !== undefined) updateFields.caste = caste;
-    if (job !== undefined) updateFields.job = job;
-    if (visaType !== undefined) updateFields.visaType = visaType;
-    if (houseType !== undefined) updateFields.houseType = houseType;
-    if (typeOfJathakam !== undefined)
-      updateFields.typeOfJathakam = typeOfJathakam;
-    if (star !== undefined) updateFields.star = star;
-    if (prefferedPlace !== undefined)
-      updateFields.prefferedPlace = prefferedPlace;
-    // Update the record
-    if (prefferedSalary !== undefined)
-      updateFields.prefferedSalary = prefferedSalary;
-    if (prefferedCourse !== undefined)
-      updateFields.prefferedCourse = prefferedCourse;
-    if (priceRange !== undefined) updateFields.priceRange = priceRange;
-    if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
-    if (aadharId !== undefined) updateFields.aadharId = aadharId;
-
-    const updatedRecord = await Data.findByIdAndUpdate(
-      existingRecord._id,
-      updateFields,
-      {
-        new: true,
-        runValidators: true,
+    // ✅ Copy only defined values
+    (Object.keys(fields) as (keyof typeof fields)[]).forEach((key) => {
+      if (fields[key] !== undefined) {
+        updateFields[key] = fields[key];
       }
-    );
+    });
+
+    // ✅ 5. Update the record safely
+    const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
+      new: true,
+      runValidators: true,
+    });
 
     return res.status(200).json({
       success: true,
@@ -1137,51 +1098,50 @@ export const updateRow = async (req: Request, res: Response) => {
 export const getStaffAssignedData = async (req: Request, res: Response) => {
   try {
     const { id: staffId } = req.params;
-    const {
-      page = 1,
-      limit,
-      dataType,
-      status,
-      data: dataFilter,
-      search,
-      sortBy = "createdAt",
-      sortOrder = "desc",
-      startDate,
-      endDate,
-    } = req.query;
+
+    // 🔹 Safely cast all query params to string
+    const page = Number(req.query.page) || 1;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const dataType = String(req.query.dataType || "");
+    const status = String(req.query.status || "");
+    const dataFilter = String(req.query.data || "");
+    const search = String(req.query.search || "");
+    const sortBy = String(req.query.sortBy || "createdAt");
+    const sortOrder = String(req.query.sortOrder || "desc");
+    const startDate = String(req.query.startDate || "");
+    const endDate = String(req.query.endDate || "");
+    const type = String(req.query.type || "all");
 
     const query: any = {
       isDeleted: false,
       assignedStaff: staffId,
     };
 
-    // Apply filters
+    // 🔹 Apply filters
     if (dataType && dataType !== "all") {
       query.dataType = { $regex: dataType, $options: "i" };
     }
+
     if (status && status !== "all") {
       query.status = { $regex: status, $options: "i" };
-    } else if (status === "all" || !status) {
-      query.status = { $in: [null, "", undefined] };
     }
+
     if (dataFilter && dataFilter !== "all") {
       query.data = { $regex: dataFilter, $options: "i" };
     }
 
-     const isValidDate = (d: string | undefined): boolean =>
+    // 🔹 Date range filter
+    const isValidDate = (d: string): boolean =>
       !!d && !isNaN(new Date(d).getTime());
-
-    if (isValidDate(startDate as string) || isValidDate(endDate as string)) {
+    if (isValidDate(startDate) || isValidDate(endDate)) {
       const dateFilter: any = {};
-      if (isValidDate(startDate as string))
-        dateFilter.$gte = new Date(startDate as string);
-      if (isValidDate(endDate as string))
-        dateFilter.$lte = new Date(
-          new Date(endDate as string).setHours(23, 59, 59, 999)
-        );
+      if (isValidDate(startDate)) dateFilter.$gte = new Date(startDate);
+      if (isValidDate(endDate))
+        dateFilter.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
       query.createdAt = dateFilter;
     }
-    
+
+    // 🔹 Search logic
     if (search && search !== "") {
       const searchRegex = { $regex: search, $options: "i" };
       query.$or = [
@@ -1195,58 +1155,103 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       ];
     }
 
-    // Build sort object
+    // 🔹 Sorting
     const sortObj: any = {};
-    if (sortBy === "createdAt") {
-      sortObj.createdAt = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "updatedAt") {
-      sortObj.updatedAt = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "name") {
-      sortObj.name = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "mobile") {
-      sortObj.mobile = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "status") {
-      sortObj.status = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "slNo") {
-      sortObj.slNo = sortOrder === "desc" ? -1 : 1;
-    } else if (sortBy === "assignedStaff.staffId") {
-      sortObj["assignedStaff.staffId"] = sortOrder === "desc" ? -1 : 1;
+    const sortFieldMap: any = {
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      name: "name",
+      mobile: "mobile",
+      status: "status",
+      slNo: "slNo",
+      "assignedStaff.staffId": "assignedStaff.staffId",
+    };
+    const field = sortFieldMap[sortBy] || "createdAt";
+    sortObj[field] = sortOrder === "desc" ? -1 : 1;
+
+    // 🔹 Pagination
+    const skip = (page - 1) * (limit || 0);
+
+    const data = await Data.find(query)
+      .populate("assignedStaff", "name staffId")
+      .sort(sortObj)
+      .skip(skip)
+      .limit(limit ? limit : 0);
+
+    const total = await Data.countDocuments(query);
+    const pagination = {
+      currentPage: page,
+      totalPages: limit ? Math.ceil(total / limit) : 1,
+      totalRecords: total,
+      limit: limit || total,
+    };
+
+    // 🔹 Add flags: isBulk, isRegister, isReferenceRegistered, isBulkRegistered
+    const updatedData = await Promise.all(
+      data.map(async (record: any) => {
+        const dataType = record.data?.toLowerCase() || "";
+        const isBulk = dataType === "bulk";
+        const isRegister = dataType === "register";
+
+        const mobile = String(record.mobile || "").trim();
+        const referenceNumber = String(record.refferenceNumber || "").trim();
+
+        let isReferenceRegistered = false;
+        let isBulkRegistered = false;
+
+        if (referenceNumber) {
+          const registeredRef = await Data.findOne({
+            $or: [
+              { mobile: referenceNumber },
+              { refferenceNumber: referenceNumber },
+            ],
+            data: "register",
+            isDeleted: false,
+          });
+          if (registeredRef) isReferenceRegistered = true;
+        }
+
+        if (mobile) {
+          const selfRegistered = await Data.findOne({
+            $or: [{ mobile }, { refferenceNumber: mobile }],
+            data: "register",
+            isDeleted: false,
+          });
+          if (selfRegistered) isBulkRegistered = true;
+        }
+
+        return {
+          ...record.toObject(),
+          isBulk,
+          isRegister,
+          isReferenceRegistered,
+          isBulkRegistered,
+        };
+      })
+    );
+
+    // 🔹 Apply type filter logic (new/old)
+    let filteredData = updatedData;
+    if (type === "old") {
+      filteredData = updatedData.filter(
+        (r) => r.isBulk && r.isReferenceRegistered && !r.isBulkRegistered
+      );
+    } else if (type === "new") {
+      filteredData = updatedData.filter(
+        (r) => r.isBulk && !r.isReferenceRegistered && !r.isBulkRegistered
+      );
     }
 
-    let data;
-    let total;
-    let pagination;
-
-    if (limit) {
-      const skip = (Number(page) - 1) * Number(limit);
-      data = await Data.find(query)
-        .populate("assignedStaff", "name staffId")
-        .sort(sortObj)
-        .skip(skip)
-        .limit(Number(limit));
-      total = await Data.countDocuments(query);
-      pagination = {
-        currentPage: Number(page),
-        totalPages: Math.ceil(total / Number(limit)),
-        totalRecords: total,
-        limit: Number(limit),
-      };
-    } else {
-      data = await Data.find(query)
-        .populate("assignedStaff", "name staffId")
-        .sort(sortObj);
-      total = data.length;
-      pagination = {
-        currentPage: 1,
-        totalPages: 1,
-        totalRecords: total,
-        limit: total,
-      };
+    // 🔹 Status filter (apply last to include flags)
+    if (status && status.toLowerCase() !== "all") {
+      filteredData = filteredData.filter(
+        (r) => r.status?.toLowerCase() === status.toLowerCase()
+      );
     }
 
     return res.status(200).json({
       success: true,
-      data,
+      data: filteredData,
       pagination,
     });
   } catch (error: any) {

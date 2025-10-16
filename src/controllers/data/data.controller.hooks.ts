@@ -1,28 +1,24 @@
 import { Counter } from "../../models/Counter";
 import { Data } from "../../models/Data";
 
+const managetRegistrationPaymentUpdate = (oldData: any, newData: any) => {
+  if (oldData?.regPayment !== newData?.regPayment) {
+    newData.regPaymentUpdatedAt = new Date();
+  }
 
-const managetRegistrationPaymentUpdate = (oldData:any, newData:any) => {
+  if (oldData?.serPayment !== newData?.serPayment) {
+    newData.serPaymentUpdatedAt = new Date();
+  }
 
-    if(oldData?.regPayment !== newData?.regPayment){
-        newData.regPaymentUpdatedAt = new Date();
-    }
+  if (oldData?.regReceived !== newData?.regReceived) {
+    newData.regReceivedUpdatedAt = new Date();
+  }
+  if (oldData?.serReceived !== newData?.serReceived) {
+    newData.serReceivedUpdatedAt = new Date();
+  }
 
-    if(oldData?.serPayment !== newData?.serPayment){
-        newData.serPaymentUpdatedAt = new Date();
-    }
-
-    if(oldData?.regReceived !== newData?.regReceived){
-        newData.regReceivedUpdatedAt = new Date();
-    }
-    if(oldData?.serReceived !== newData?.serReceived){
-        newData.serReceivedUpdatedAt = new Date();
-    }
-
-    return newData;
-
-
-}
+  return newData;
+};
 
 const createRegistrationUniqueSerialNumber = async (formType: string) => {
   const seriesTemplate: any = {
@@ -32,6 +28,7 @@ const createRegistrationUniqueSerialNumber = async (formType: string) => {
     general: { prefix: "G", startFrom: 100000 },
     matrimony: { prefix: "M", startFrom: 100000 },
     bulk: { prefix: "B", startFrom: 100000 },
+    pg: { prefix: "P", startFrom: 100000 },
   };
 
   const series = seriesTemplate[formType] || seriesTemplate["general"];
@@ -50,17 +47,14 @@ const createRegistrationUniqueSerialNumber = async (formType: string) => {
     { new: true }
   );
 
-   if (!updatedCounter) {
+  if (!updatedCounter) {
     throw new Error(`Failed to update counter for prefix: ${series.prefix}`);
   }
 
   return `${series.prefix}${updatedCounter.seq}`;
 };
 
-
-
-
 export const dataControllerHooks = {
-    managetRegistrationPaymentUpdate,
-    createRegistrationUniqueSerialNumber
-}
+  managetRegistrationPaymentUpdate,
+  createRegistrationUniqueSerialNumber,
+};
