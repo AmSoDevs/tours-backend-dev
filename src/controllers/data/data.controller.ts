@@ -8,6 +8,7 @@ import {
   resetStaffAssignmentIfNeeded,
   assignStaffForSingleRecord,
   assignStaffWithRotation,
+  checkDuplicateNumbers,
 } from "../../utils/helper";
 import { FormTracking } from "../../models/FormTracking";
 import { dataControllerHooks } from "./data.controller.hooks";
@@ -578,7 +579,6 @@ export const submitForm = async (req: Request, res: Response) => {
     }
 
     const form = await FormTracking.findOne({ trackingId });
-
     if (!form) {
       return res.status(400).json({
         success: false,
@@ -586,28 +586,23 @@ export const submitForm = async (req: Request, res: Response) => {
       });
     }
 
-    // --- NEW LOGIC STARTS HERE ---
     const isMultipleAllowed = form.allowMultiple === true;
 
-    // If multiple is NOT allowed, then we check for duplicates
+    // ✅ New duplicate check logic
     if (!isMultipleAllowed) {
-      const existingRecord = await Data.findOne({
-        $and: [
-          {
-            $or: [{ mobile: mobile }, { refferenceNumber: mobile }],
-          },
-          { data: form.formType },
-        ],
-      });
+      const duplicateRecord = await checkDuplicateNumbers(
+        { mobile, whatsapp, altMobNumber },
+        form.formType
+      );
 
-      if (existingRecord && form.status === "shared") {
+      if (duplicateRecord && form.status === "shared") {
         return res.status(400).json({
           success: false,
-          message: "Mobile number already exists.",
+          message:
+            "One of the numbers (mobile / WhatsApp / alternate) already exists in another record.",
         });
       }
     }
-    // --- NEW LOGIC ENDS HERE ---
 
     let assignedStaff: any;
     let staffAssignment: any;
@@ -688,7 +683,6 @@ export const submitForm = async (req: Request, res: Response) => {
       if (!form.staffId) form.staffId = assignedStaff;
       await form.save();
     } else {
-      // For allowMultiple = true, don't overwrite dataId or current record
       form.status = "in_progress";
       form.currentStep = 1;
       await form.save();
@@ -710,6 +704,7 @@ export const submitForm = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const updateForm = async (req: Request, res: Response) => {
   try {
@@ -748,7 +743,6 @@ export const updateForm = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ 1️⃣ Find the FormTracking record
     const form = await FormTracking.findOne({ trackingId });
     if (!form) {
       return res.status(400).json({
@@ -758,26 +752,35 @@ export const updateForm = async (req: Request, res: Response) => {
     }
 
     const allowMultiple = form.allowMultiple || false;
-
-    // ✅ 2️⃣ Try to find an existing Data record
     let recordToUpdate = null;
 
-    // If allowMultiple = false, we always use the one linked to form
+    // ✅ Find existing record
     if (!allowMultiple && form.dataId) {
       recordToUpdate = await Data.findById(form.dataId);
     }
 
-    // If allowMultiple = true, find by mobile and form type
     if (allowMultiple) {
       recordToUpdate = await Data.findOne({
-        $and: [
-          { mobile: mobile },
-          { data: form.formType },
-        ],
+        $and: [{ mobile: mobile }, { data: form.formType }],
       });
     }
 
-    // ✅ 3️⃣ If no record found and allowMultiple is true → create new one
+    // ✅ Duplicate check (before create or update)
+    const duplicateRecord = await checkDuplicateNumbers(
+      { mobile, whatsapp, altMobNumber },
+      form.formType,
+      recordToUpdate?._id?.toString()
+    );
+
+    if (duplicateRecord) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "One of the numbers (mobile / WhatsApp / alternate) already exists in another record.",
+      });
+    }
+
+    // ✅ If no record found & allowMultiple is true → create new one
     if (!recordToUpdate && allowMultiple) {
       const newData = new Data({
         name,
@@ -803,12 +806,11 @@ export const updateForm = async (req: Request, res: Response) => {
         contactPersonName,
         profilePhoto,
         data: form.formType,
-        refferenceNumber: mobile, // optional link
+        refferenceNumber: mobile,
       });
 
       await newData.save();
 
-      // Optionally link new record if single mode
       if (!allowMultiple) {
         form.dataId = newData._id;
         form.status = "in_progress";
@@ -822,11 +824,11 @@ export const updateForm = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ 4️⃣ If record exists → update it
     if (!recordToUpdate) {
       return res.status(404).json({
         success: false,
-        message: "No existing record found to update. Please submit the form first.",
+        message:
+          "No existing record found to update. Please submit the form first.",
       });
     }
 
@@ -856,7 +858,6 @@ export const updateForm = async (req: Request, res: Response) => {
       status,
     };
 
-    // Remove undefined
     Object.keys(updateFields).forEach((k) => {
       if (updateFields[k] === undefined) delete updateFields[k];
     });
@@ -867,7 +868,6 @@ export const updateForm = async (req: Request, res: Response) => {
       { new: true, runValidators: true }
     );
 
-    // ✅ 5️⃣ Update form tracking progress
     if (step !== undefined) form.currentStep = step;
     if (step === 3) form.status = "submitted";
     if (!allowMultiple) await form.save();
@@ -886,6 +886,7 @@ export const updateForm = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const updateRow = async (req: Request, res: Response) => {
   try {
