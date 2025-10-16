@@ -893,6 +893,7 @@ export const updateRow = async (req: Request, res: Response) => {
     const {
       id,
       mobile,
+      whatsapp,
       altMobNumber,
       name,
       status,
@@ -938,6 +939,7 @@ export const updateRow = async (req: Request, res: Response) => {
       dateOfBirth,
       profilePhoto,
       aadharId,
+      createProfileFor,
     } = req.body;
 
     if (!id) {
@@ -956,23 +958,37 @@ export const updateRow = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ 2. Check if mobile/reference actually changed
-    const isMobileChanged =
-      mobile !== undefined && mobile !== existingRecord.mobile;
-    const isReferenceChanged =
-      refferenceNumber !== undefined &&
-      refferenceNumber !== existingRecord.refferenceNumber;
+    // ✅ 2. Check if mobile/whatsapp/altMobNumber changed
+    const hasChanged =
+      (mobile && mobile !== existingRecord.mobile) ||
+      (whatsapp && whatsapp !== existingRecord.whatsapp) ||
+      (altMobNumber && altMobNumber !== existingRecord.altMobNumber) ||
+      (refferenceNumber && refferenceNumber !== existingRecord.refferenceNumber);
 
-    // ✅ 3. Duplicate check only when changed
-    if (isMobileChanged || isReferenceChanged) {
+    // ✅ 3. Duplicate check only when any number changed
+    if (hasChanged) {
+      // Prevent same number for mobile & refference in same record
       if (
-        mobile !== undefined &&
-        refferenceNumber !== undefined &&
-        mobile === refferenceNumber
+        mobile &&
+        refferenceNumber &&
+        mobile.trim() === refferenceNumber.trim()
       ) {
         return res.status(400).json({
           success: false,
           message: "Mobile number and reference number cannot be the same.",
+        });
+      }
+
+      // Prevent same number across mobile/whatsapp/altMobNumber in same record
+      const allNumbers = [mobile, whatsapp, altMobNumber]
+        .filter(Boolean)
+        .map((n) => n.trim());
+      const uniqueNumbers = new Set(allNumbers);
+      if (allNumbers.length !== uniqueNumbers.size) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Mobile, WhatsApp, and Alternate number cannot be identical within the same record.",
         });
       }
 
@@ -982,23 +998,19 @@ export const updateRow = async (req: Request, res: Response) => {
       };
 
       const isVisaType = existingRecord?.data?.toLowerCase() === "visa";
-      if (!isVisaType) {
-        duplicateCheckQuery.data = existingRecord?.data;
-      }
+      if (!isVisaType) duplicateCheckQuery.data = existingRecord?.data;
 
-      if (mobile) {
-        duplicateCheckQuery.$or.push(
-          { mobile: mobile },
-          { refferenceNumber: mobile }
-        );
-      }
-
-      if (refferenceNumber) {
-        duplicateCheckQuery.$or.push(
-          { mobile: refferenceNumber },
-          { refferenceNumber: refferenceNumber }
-        );
-      }
+      // Build duplicate OR conditions
+      [mobile, whatsapp, altMobNumber, refferenceNumber]
+        .filter((n) => n && n.trim() !== "")
+        .forEach((num) => {
+          duplicateCheckQuery.$or.push(
+            { mobile: num },
+            { whatsapp: num },
+            { altMobNumber: num },
+            { refferenceNumber: num }
+          );
+        });
 
       if (duplicateCheckQuery.$or.length > 0) {
         const duplicateRecord = await Data.findOne(duplicateCheckQuery);
@@ -1006,15 +1018,16 @@ export const updateRow = async (req: Request, res: Response) => {
           return res.status(400).json({
             success: false,
             message:
-              "Mobile number or reference number already exists in another record.",
+              "One of the numbers (Mobile / WhatsApp / Alternate) already exists in another record.",
           });
         }
       }
     }
 
-    // ✅ 4. Prepare update fields (TS safe)
+    // ✅ 4. Prepare update fields
     const fields: Record<string, any> = {
       mobile,
+      whatsapp,
       altMobNumber,
       name,
       status,
@@ -1060,6 +1073,7 @@ export const updateRow = async (req: Request, res: Response) => {
       priceRange,
       profilePhoto,
       aadharId,
+      createProfileFor,
     };
 
     const updateFields: any =
@@ -1075,7 +1089,7 @@ export const updateRow = async (req: Request, res: Response) => {
       }
     });
 
-    // ✅ 5. Update the record safely
+    // ✅ 5. Update record safely
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
@@ -1087,14 +1101,35 @@ export const updateRow = async (req: Request, res: Response) => {
       data: updatedRecord,
     });
   } catch (error: any) {
-    console.error("Error updating row:", error);
+    console.error("❌ Error updating row:", error);
+
+    const extractErrorMessage = (error: any): string => {
+      if (!error) return "Unknown error";
+      if (typeof error === "string") return error;
+      if (error.message) return error.message;
+      if (error.errors) {
+        const messages = Object.values(error.errors)
+          .map((err: any) => err.message)
+          .join(", ");
+        return messages || "Validation error";
+      }
+      if (error.keyValue) {
+        return `Duplicate value for field(s): ${Object.keys(
+          error.keyValue
+        ).join(", ")}`;
+      }
+      return JSON.stringify(error);
+    };
+
+    const errorMessage = extractErrorMessage(error);
+
     return res.status(500).json({
       success: false,
-      message: "Internal server error while updating record",
-      error: error.message,
+      message: errorMessage,
     });
   }
 };
+
 
 export const getStaffAssignedData = async (req: Request, res: Response) => {
   try {
