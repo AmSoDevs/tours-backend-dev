@@ -112,8 +112,6 @@ export const checkExistingStaffIds = async (): Promise<void> => {
     })
       .select("staffId name")
       .sort({ staffId: 1 });
-
-  
   } catch (error) {
     console.error("Error checking existing staff IDs:", error);
   }
@@ -137,11 +135,13 @@ export const generateUniqueTrackingId = async (): Promise<string> => {
     const maxAttempts = 50;
 
     while (attempts < maxAttempts) {
-      const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let trackingId = '';
-      
+      const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      let trackingId = "";
+
       for (let i = 0; i < 10; i++) {
-        trackingId += characters.charAt(Math.floor(Math.random() * characters.length));
+        trackingId += characters.charAt(
+          Math.floor(Math.random() * characters.length)
+        );
       }
 
       const existingRecord = await FormTracking.findOne({ trackingId });
@@ -153,30 +153,35 @@ export const generateUniqueTrackingId = async (): Promise<string> => {
     }
 
     const timestamp = Date.now().toString().slice(-6);
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let fallbackId = '';
-    
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let fallbackId = "";
+
     for (let i = 0; i < 4; i++) {
-      fallbackId += characters.charAt(Math.floor(Math.random() * characters.length));
+      fallbackId += characters.charAt(
+        Math.floor(Math.random() * characters.length)
+      );
     }
-    
+
     return fallbackId + timestamp;
   } catch (error) {
     console.error("Error generating trackingId:", error);
     const timestamp = Date.now().toString().slice(-6);
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let fallbackId = '';
-    
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let fallbackId = "";
+
     for (let i = 0; i < 4; i++) {
-      fallbackId += characters.charAt(Math.floor(Math.random() * characters.length));
+      fallbackId += characters.charAt(
+        Math.floor(Math.random() * characters.length)
+      );
     }
-    
+
     return fallbackId + timestamp;
   }
 };
 
-
-export const assignStaffWithRotation = async (staffMembers: any[]): Promise<{
+export const assignStaffWithRotation = async (
+  staffMembers: any[]
+): Promise<{
   assignedStaffId: string;
   staffAssignment: any;
 }> => {
@@ -196,65 +201,76 @@ export const assignStaffWithRotation = async (staffMembers: any[]): Promise<{
   let lastAssignedStaffIndex = -1;
   if (staffAssignment.lastAssignedStaffId) {
     lastAssignedStaffIndex = staffMembers.findIndex(
-      staff => staff._id.toString() === staffAssignment.lastAssignedStaffId
+      (staff) => staff._id.toString() === staffAssignment.lastAssignedStaffId
     );
   }
-
 
   if (lastAssignedStaffIndex === -1 && staffAssignment.lastAssignedStaffId) {
     console.log(
       `Last assigned staff (${staffAssignment.lastAssignedStaffId}) not found in current active staff. Finding next staff in rotation.`
     );
-    
+
     const allStaff = await Staff.find({
       isDeleted: false,
-    }).select("_id").sort({ _id: 1 }); 
-    
+    })
+      .select("_id")
+      .sort({ _id: 1 });
+
     const lastAssignedIndexInAll = allStaff.findIndex(
-      staff => staff._id.toString() === staffAssignment.lastAssignedStaffId
+      (staff) => staff._id.toString() === staffAssignment.lastAssignedStaffId
     );
-    
+
     if (lastAssignedIndexInAll !== -1) {
       for (let i = 1; i < allStaff.length; i++) {
         const nextIndex = (lastAssignedIndexInAll + i) % allStaff.length;
         const nextStaff = allStaff[nextIndex];
         const activeIndex = staffMembers.findIndex(
-          staff => staff._id.toString() === nextStaff._id.toString()
+          (staff) => staff._id.toString() === nextStaff._id.toString()
         );
         if (activeIndex !== -1) {
-          lastAssignedStaffIndex = activeIndex - 1; 
-          console.log(`Found next active staff in rotation: ${nextStaff._id} at index ${activeIndex}`);
+          lastAssignedStaffIndex = activeIndex - 1;
+          console.log(
+            `Found next active staff in rotation: ${nextStaff._id} at index ${activeIndex}`
+          );
           break;
         }
       }
     } else {
-      console.log(`Last assigned staff (${staffAssignment.lastAssignedStaffId}) was deleted. Finding next active staff in rotation.`);
-      
-      const allStaffIncludingDeleted = await Staff.find({
-      }).select("_id").sort({ _id: 1 });
-      
-      const deletedStaffIndex = allStaffIncludingDeleted.findIndex(
-        staff => staff._id.toString() === staffAssignment.lastAssignedStaffId
+      console.log(
+        `Last assigned staff (${staffAssignment.lastAssignedStaffId}) was deleted. Finding next active staff in rotation.`
       );
-      
+
+      const allStaffIncludingDeleted = await Staff.find({})
+        .select("_id")
+        .sort({ _id: 1 });
+
+      const deletedStaffIndex = allStaffIncludingDeleted.findIndex(
+        (staff) => staff._id.toString() === staffAssignment.lastAssignedStaffId
+      );
+
       if (deletedStaffIndex !== -1) {
         for (let i = 1; i < allStaffIncludingDeleted.length; i++) {
-          const nextIndex = (deletedStaffIndex + i) % allStaffIncludingDeleted.length;
+          const nextIndex =
+            (deletedStaffIndex + i) % allStaffIncludingDeleted.length;
           const nextStaff = allStaffIncludingDeleted[nextIndex];
           const activeIndex = staffMembers.findIndex(
-            staff => staff._id.toString() === nextStaff._id.toString()
+            (staff) => staff._id.toString() === nextStaff._id.toString()
           );
           if (activeIndex !== -1) {
-            lastAssignedStaffIndex = activeIndex - 1; 
-            console.log(`Found next active staff after deleted staff: ${nextStaff._id} at index ${activeIndex}`);
+            lastAssignedStaffIndex = activeIndex - 1;
+            console.log(
+              `Found next active staff after deleted staff: ${nextStaff._id} at index ${activeIndex}`
+            );
             break;
           }
         }
       }
     }
-    
+
     if (lastAssignedStaffIndex === -1) {
-      console.log("No next active staff found in rotation. Starting from first staff.");
+      console.log(
+        "No next active staff found in rotation. Starting from first staff."
+      );
       lastAssignedStaffIndex = -1;
     }
   }
@@ -272,7 +288,7 @@ export const assignStaffWithRotation = async (staffMembers: any[]): Promise<{
 
   return {
     assignedStaffId: assignedStaff.toString(),
-    staffAssignment
+    staffAssignment,
   };
 };
 
@@ -282,7 +298,9 @@ export const assignStaffWithRotation = async (staffMembers: any[]): Promise<{
  * @param staffMembers - Array of active staff members
  * @returns Object containing assignedStaffId and updated staffAssignment
  */
-export const assignStaffForSingleRecord = async (staffMembers: any[]): Promise<{
+export const assignStaffForSingleRecord = async (
+  staffMembers: any[]
+): Promise<{
   assignedStaffId: string;
   staffAssignment: any;
 }> => {
@@ -303,74 +321,87 @@ export const assignStaffForSingleRecord = async (staffMembers: any[]): Promise<{
   let lastAssignedStaffIndex = -1;
   if (staffAssignment.lastAssignedStaffId) {
     lastAssignedStaffIndex = staffMembers.findIndex(
-      staff => staff._id.toString() === staffAssignment.lastAssignedStaffId
+      (staff) => staff._id.toString() === staffAssignment.lastAssignedStaffId
     );
   }
 
-  // If the last assigned staff is not in the current active staff array, 
+  // If the last assigned staff is not in the current active staff array,
   // find the next staff in the original rotation sequence
   if (lastAssignedStaffIndex === -1 && staffAssignment.lastAssignedStaffId) {
     console.log(
       `Last assigned staff (${staffAssignment.lastAssignedStaffId}) not found in current active staff. Finding next staff in rotation.`
     );
-    
+
     // Get all staff (including inactive but excluding deleted) to determine original sequence
     const allStaff = await Staff.find({
       isDeleted: false,
-    }).select("_id").sort({ _id: 1 }); // Sort by creation order for consistent sequence
-    
+    })
+      .select("_id")
+      .sort({ _id: 1 }); // Sort by creation order for consistent sequence
+
     const lastAssignedIndexInAll = allStaff.findIndex(
-      staff => staff._id.toString() === staffAssignment.lastAssignedStaffId
+      (staff) => staff._id.toString() === staffAssignment.lastAssignedStaffId
     );
-    
+
     if (lastAssignedIndexInAll !== -1) {
       // Last assigned staff exists (not deleted), find next active staff in rotation
       for (let i = 1; i < allStaff.length; i++) {
         const nextIndex = (lastAssignedIndexInAll + i) % allStaff.length;
         const nextStaff = allStaff[nextIndex];
         const activeIndex = staffMembers.findIndex(
-          staff => staff._id.toString() === nextStaff._id.toString()
+          (staff) => staff._id.toString() === nextStaff._id.toString()
         );
         if (activeIndex !== -1) {
           lastAssignedStaffIndex = activeIndex - 1; // Set to previous index so next assignment goes to this staff
-          console.log(`Found next active staff in rotation: ${nextStaff._id} at index ${activeIndex}`);
+          console.log(
+            `Found next active staff in rotation: ${nextStaff._id} at index ${activeIndex}`
+          );
           break;
         }
       }
     } else {
       // Last assigned staff was deleted, find next active staff from original rotation
-      console.log(`Last assigned staff (${staffAssignment.lastAssignedStaffId}) was deleted. Finding next active staff in rotation.`);
-      
+      console.log(
+        `Last assigned staff (${staffAssignment.lastAssignedStaffId}) was deleted. Finding next active staff in rotation.`
+      );
+
       // Get all staff including deleted to find original position
       const allStaffIncludingDeleted = await Staff.find({
         // No filter to include deleted staff
-      }).select("_id").sort({ _id: 1 });
-      
+      })
+        .select("_id")
+        .sort({ _id: 1 });
+
       // Find the deleted staff's original position
       const deletedStaffIndex = allStaffIncludingDeleted.findIndex(
-        staff => staff._id.toString() === staffAssignment.lastAssignedStaffId
+        (staff) => staff._id.toString() === staffAssignment.lastAssignedStaffId
       );
-      
+
       if (deletedStaffIndex !== -1) {
         // Find next active staff after the deleted one
         for (let i = 1; i < allStaffIncludingDeleted.length; i++) {
-          const nextIndex = (deletedStaffIndex + i) % allStaffIncludingDeleted.length;
+          const nextIndex =
+            (deletedStaffIndex + i) % allStaffIncludingDeleted.length;
           const nextStaff = allStaffIncludingDeleted[nextIndex];
           const activeIndex = staffMembers.findIndex(
-            staff => staff._id.toString() === nextStaff._id.toString()
+            (staff) => staff._id.toString() === nextStaff._id.toString()
           );
           if (activeIndex !== -1) {
             lastAssignedStaffIndex = activeIndex - 1; // Set to previous index so next assignment goes to this staff
-            console.log(`Found next active staff after deleted staff: ${nextStaff._id} at index ${activeIndex}`);
+            console.log(
+              `Found next active staff after deleted staff: ${nextStaff._id} at index ${activeIndex}`
+            );
             break;
           }
         }
       }
     }
-    
+
     // If no next active staff found in rotation, start from beginning
     if (lastAssignedStaffIndex === -1) {
-      console.log("No next active staff found in rotation. Starting from first staff.");
+      console.log(
+        "No next active staff found in rotation. Starting from first staff."
+      );
       lastAssignedStaffIndex = -1;
     }
   }
@@ -389,6 +420,35 @@ export const assignStaffForSingleRecord = async (staffMembers: any[]): Promise<{
 
   return {
     assignedStaffId: assignedStaff.toString(),
-    staffAssignment
+    staffAssignment,
   };
+};
+
+export const checkDuplicateNumbers = async (
+  { mobile, whatsapp, altMobNumber }: any,
+  formType: string,
+  excludeId?: string // use in update mode
+) => {
+  const numbersToCheck = [mobile, whatsapp, altMobNumber].filter(
+    (n) => n && n.trim() !== ""
+  );
+
+  if (numbersToCheck.length === 0) return null;
+
+  const query: any = {
+    $or: numbersToCheck.flatMap((num) => [
+      { mobile: num },
+      { whatsapp: num },
+      { altMobNumber: num },
+      { refferenceNumber: num },
+    ]),
+    data: formType,
+  };
+
+  if (excludeId) {
+    query._id = { $ne: excludeId };
+  }
+
+  const duplicate = await Data.findOne(query);
+  return duplicate;
 };

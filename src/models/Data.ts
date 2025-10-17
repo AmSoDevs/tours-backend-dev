@@ -43,8 +43,9 @@ export interface DataDocument extends Document {
   priceRange?: string;
   prefferedPlace?: string;
   caste?: string;
-  typeOfJathakam?: string;
   star?: string;
+  typeOfJathakam?: string;
+  lookingFor?: string;
   prefferedSalary?: string;
   visaType?: string;
   prefferedCourse?: string;
@@ -72,12 +73,12 @@ export interface DataDocument extends Document {
 const DataSchema = new Schema<DataDocument>(
   {
     slNo: { type: String, required: true },
-    profileId: { type: String},
-    dataType: { type: String},
+    profileId: { type: String },
+    dataType: { type: String },
     data: { type: String },
     verified: { type: String },
     mobile: { type: String, required: true },
-    altMobNumber: { type: String},
+    altMobNumber: { type: String },
     name: { type: String },
     remarkFirst: { type: String },
     status: { type: String },
@@ -117,6 +118,9 @@ const DataSchema = new Schema<DataDocument>(
     priceRange: { type: String },
     prefferedPlace: { type: String },
     caste: { type: String },
+    star: { type: String },
+    typeOfJathakam: { type: String },
+    lookingFor: { type: String },
     prefferedSalary: { type: String },
     visaType: { type: String },
     prefferedCourse: { type: String },
@@ -142,14 +146,14 @@ const DataSchema = new Schema<DataDocument>(
     serDate: { type: String },
     profilePhoto: { type: String },
     files: [{ type: Schema.Types.ObjectId, ref: "Files" }],
-
   },
   { timestamps: true }
 );
 
-DataSchema.index({ mobile: 1 }, { unique: true });
-DataSchema.index({ slNo: 1 }, { unique: true });
-DataSchema.index({ profileId: 1 }, { unique: true });
+DataSchema.index({ data: 1, mobile: 1 }, { unique: true });
+DataSchema.index({ data: 1, slNo: 1 }, { unique: true });
+DataSchema.index({ data: 1, profileId: 1 }, { unique: true });
+
 
 export const Data: Model<DataDocument> =
   mongoose.models.Data || mongoose.model<DataDocument>("Data", DataSchema);
