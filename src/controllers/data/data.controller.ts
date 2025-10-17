@@ -573,6 +573,10 @@ export const submitForm = async (req: Request, res: Response) => {
       lookingFor,
       star,
       typeOfJathakam,
+      prefferedSalary,
+      passportNo,
+      aadharId,
+      caste,
     } = req.body;
 
     if (!name || !mobile) {
@@ -667,17 +671,17 @@ export const submitForm = async (req: Request, res: Response) => {
       houseType: req.body.houseType,
       priceRange: req.body.priceRange,
       prefferedPlace: req.body.prefferedPlace,
-      caste: req.body.caste,
-      passportNo: req.body.passportNo,
-      aadharId: req.body.aadharId,
-      prefferedSalary: req.body.prefferedSalary,
       visaType: req.body.visaType,
       prefferedCourse: req.body.prefferedCourse,
+      caste,
       // 🆕 Newly added fields
       lookingFor,
       star,
       typeOfJathakam,
       assignedStaff,
+      prefferedSalary,
+      passportNo,
+      aadharId,
       isDeleted: false,
     });
 
@@ -745,6 +749,10 @@ export const updateForm = async (req: Request, res: Response) => {
       lookingFor,
       star,
       typeOfJathakam,
+      caste,
+      prefferedSalary,
+      passportNo,
+      aadharId,
     } = req.body;
 
     if (!trackingId) {
@@ -819,6 +827,10 @@ export const updateForm = async (req: Request, res: Response) => {
         lookingFor,
         star,
         typeOfJathakam,
+        caste,
+        prefferedSalary,
+        passportNo,
+        aadharId
       });
 
       await newData.save();
@@ -872,6 +884,10 @@ export const updateForm = async (req: Request, res: Response) => {
       lookingFor,
       star,
       typeOfJathakam,
+      caste,
+      prefferedSalary,
+      passportNo,
+      aadharId
     };
 
     Object.keys(updateFields).forEach((k) => {
