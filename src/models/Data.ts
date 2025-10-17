@@ -151,8 +151,9 @@ const DataSchema = new Schema<DataDocument>(
 );
 
 DataSchema.index({ data: 1, mobile: 1 }, { unique: true });
-DataSchema.index({ slNo: 1 }, { unique: true });
-DataSchema.index({ profileId: 1 }, { unique: true });
+DataSchema.index({ data: 1, slNo: 1 }, { unique: true });
+DataSchema.index({ data: 1, profileId: 1 }, { unique: true });
+
 
 export const Data: Model<DataDocument> =
   mongoose.models.Data || mongoose.model<DataDocument>("Data", DataSchema);
