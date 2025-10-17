@@ -150,7 +150,7 @@ const DataSchema = new Schema<DataDocument>(
   { timestamps: true }
 );
 
-DataSchema.index({ mobile: 1 }, { unique: true });
+DataSchema.index({ data: 1, mobile: 1 }, { unique: true });
 DataSchema.index({ slNo: 1 }, { unique: true });
 DataSchema.index({ profileId: 1 }, { unique: true });
 

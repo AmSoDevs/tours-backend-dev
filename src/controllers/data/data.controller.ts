@@ -569,6 +569,7 @@ export const submitForm = async (req: Request, res: Response) => {
       createProfileFor,
       contactPersonName,
       trackingId,
+      // 🆕 Newly added
       lookingFor,
       star,
       typeOfJathakam,
@@ -591,13 +592,12 @@ export const submitForm = async (req: Request, res: Response) => {
 
     const isMultipleAllowed = form.allowMultiple === true;
 
-    // ✅ New duplicate check logic
+    // ✅ Duplicate check
     if (!isMultipleAllowed) {
       const duplicateRecord = await checkDuplicateNumbers(
         { mobile, whatsapp, altMobNumber },
         form.formType
       );
-
       if (duplicateRecord && form.status === "shared") {
         return res.status(400).json({
           success: false,
@@ -607,6 +607,7 @@ export const submitForm = async (req: Request, res: Response) => {
       }
     }
 
+    // ✅ Staff assignment
     let assignedStaff: any;
     let staffAssignment: any;
 
@@ -672,6 +673,7 @@ export const submitForm = async (req: Request, res: Response) => {
       prefferedSalary: req.body.prefferedSalary,
       visaType: req.body.visaType,
       prefferedCourse: req.body.prefferedCourse,
+      // 🆕 Newly added fields
       lookingFor,
       star,
       typeOfJathakam,
@@ -681,7 +683,6 @@ export const submitForm = async (req: Request, res: Response) => {
 
     await newData.save();
 
-    // Update form only if single entry is allowed
     if (!isMultipleAllowed) {
       form.status = "in_progress";
       form.dataId = newData._id;
@@ -711,6 +712,7 @@ export const submitForm = async (req: Request, res: Response) => {
   }
 };
 
+
 export const updateForm = async (req: Request, res: Response) => {
   try {
     const {
@@ -739,6 +741,7 @@ export const updateForm = async (req: Request, res: Response) => {
       step,
       status,
       profilePhoto,
+      // 🆕 Newly added
       lookingFor,
       star,
       typeOfJathakam,
@@ -762,7 +765,6 @@ export const updateForm = async (req: Request, res: Response) => {
     const allowMultiple = form.allowMultiple || false;
     let recordToUpdate = null;
 
-    // ✅ Find existing record
     if (!allowMultiple && form.dataId) {
       recordToUpdate = await Data.findById(form.dataId);
     }
@@ -773,7 +775,6 @@ export const updateForm = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Duplicate check (before create or update)
     const duplicateRecord = await checkDuplicateNumbers(
       { mobile, whatsapp, altMobNumber },
       form.formType,
@@ -788,7 +789,6 @@ export const updateForm = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ If no record found & allowMultiple is true → create new one
     if (!recordToUpdate && allowMultiple) {
       const newData = new Data({
         name,
@@ -813,11 +813,12 @@ export const updateForm = async (req: Request, res: Response) => {
         createProfileFor,
         contactPersonName,
         profilePhoto,
+        data: form.formType,
+        refferenceNumber: mobile,
+        // 🆕 Newly added
         lookingFor,
         star,
         typeOfJathakam,
-        data: form.formType,
-        refferenceNumber: mobile,
       });
 
       await newData.save();
@@ -867,6 +868,10 @@ export const updateForm = async (req: Request, res: Response) => {
       contactPersonName,
       profilePhoto,
       status,
+      // 🆕 Added
+      lookingFor,
+      star,
+      typeOfJathakam,
     };
 
     Object.keys(updateFields).forEach((k) => {
@@ -897,6 +902,7 @@ export const updateForm = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const updateRow = async (req: Request, res: Response) => {
   try {
@@ -940,8 +946,8 @@ export const updateRow = async (req: Request, res: Response) => {
       job,
       visaType,
       houseType,
-      star,
       typeOfJathakam,
+      star,
       lookingFor,
       prefferedPlace,
       prefferedSalary,
@@ -953,91 +959,55 @@ export const updateRow = async (req: Request, res: Response) => {
       createProfileFor,
     } = req.body;
 
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Record ID is required",
-      });
-    }
+    if (!id)
+      return res.status(400).json({ success: false, message: "Record ID is required" });
 
-    // ✅ 1. Fetch existing record
     const existingRecord = await Data.findById(id);
-    if (!existingRecord) {
-      return res.status(404).json({
-        success: false,
-        message: "Record not found. Please submit the form first.",
-      });
-    }
+    if (!existingRecord)
+      return res.status(404).json({ success: false, message: "Record not found" });
 
-    // ✅ 2. Check if mobile/whatsapp/altMobNumber changed
+    // ✅ Full duplicate check (4 fields)
     const hasChanged =
       (mobile && mobile !== existingRecord.mobile) ||
       (whatsapp && whatsapp !== existingRecord.whatsapp) ||
       (altMobNumber && altMobNumber !== existingRecord.altMobNumber) ||
-      (refferenceNumber &&
-        refferenceNumber !== existingRecord.refferenceNumber);
+      (refferenceNumber && refferenceNumber !== existingRecord.refferenceNumber);
 
-    // ✅ 3. Duplicate check only when any number changed
     if (hasChanged) {
-      // Prevent same number for mobile & refference in same record
-      if (
-        mobile &&
-        refferenceNumber &&
-        mobile.trim() === refferenceNumber.trim()
-      ) {
+      const numbersToCheck = [mobile, whatsapp, altMobNumber, refferenceNumber].filter(Boolean);
+      const uniqueNumbers = new Set(numbersToCheck);
+      if (uniqueNumbers.size !== numbersToCheck.length) {
         return res.status(400).json({
           success: false,
-          message: "Mobile number and reference number cannot be the same.",
+          message: "Mobile, WhatsApp, Alternate, and Reference numbers cannot be identical.",
         });
       }
 
-      // Prevent same number across mobile/whatsapp/altMobNumber in same record
-      const allNumbers = [mobile, whatsapp, altMobNumber]
-        .filter(Boolean)
-        .map((n) => n.trim());
-      const uniqueNumbers = new Set(allNumbers);
-      if (allNumbers.length !== uniqueNumbers.size) {
+      const duplicateCheckQuery: any = { _id: { $ne: id }, $or: [] };
+      const isVisaType = existingRecord.data?.toLowerCase() === "visa";
+      if (!isVisaType) duplicateCheckQuery.data = existingRecord.data;
+
+      numbersToCheck.forEach((num) => {
+        duplicateCheckQuery.$or.push(
+          { mobile: num },
+          { whatsapp: num },
+          { altMobNumber: num },
+          { refferenceNumber: num }
+        );
+      });
+
+      const duplicateRecord = await Data.findOne(duplicateCheckQuery);
+      if (duplicateRecord) {
         return res.status(400).json({
           success: false,
           message:
-            "Mobile, WhatsApp, and Alternate number cannot be identical within the same record.",
+            "One of the numbers (Mobile / WhatsApp / Alternate / Reference) already exists in another record.",
         });
-      }
-
-      const duplicateCheckQuery: any = {
-        _id: { $ne: id },
-        $or: [],
-      };
-
-      const isVisaType = existingRecord?.data?.toLowerCase() === "visa";
-      if (!isVisaType) duplicateCheckQuery.data = existingRecord?.data;
-
-      // Build duplicate OR conditions
-      [mobile, whatsapp, altMobNumber, refferenceNumber]
-        .filter((n) => n && n.trim() !== "")
-        .forEach((num) => {
-          duplicateCheckQuery.$or.push(
-            { mobile: num },
-            { whatsapp: num },
-            { altMobNumber: num },
-            { refferenceNumber: num }
-          );
-        });
-
-      if (duplicateCheckQuery.$or.length > 0) {
-        const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-        if (duplicateRecord) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "One of the numbers (Mobile / WhatsApp / Alternate) already exists in another record.",
-          });
-        }
       }
     }
 
-    // ✅ 4. Prepare update fields
-    const fields: Record<string, any> = {
+    // ✅ Prepare update fields
+    const updateFields = {
       mobile,
       whatsapp,
       altMobNumber,
@@ -1047,7 +1017,6 @@ export const updateRow = async (req: Request, res: Response) => {
       remarkSecond,
       verified,
       dataType,
-      dateOfBirth,
       refferenceNumber,
       refferenceName,
       regPayment,
@@ -1084,25 +1053,12 @@ export const updateRow = async (req: Request, res: Response) => {
       prefferedSalary,
       prefferedCourse,
       priceRange,
+      dateOfBirth,
       profilePhoto,
       aadharId,
       createProfileFor,
     };
 
-    const updateFields: any =
-      dataControllerHooks.managetRegistrationPaymentUpdate(
-        existingRecord,
-        req.body
-      );
-
-    // ✅ Copy only defined values
-    (Object.keys(fields) as (keyof typeof fields)[]).forEach((key) => {
-      if (fields[key] !== undefined) {
-        updateFields[key] = fields[key];
-      }
-    });
-
-    // ✅ 5. Update record safely
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
@@ -1114,34 +1070,14 @@ export const updateRow = async (req: Request, res: Response) => {
       data: updatedRecord,
     });
   } catch (error: any) {
-    console.error(" Error updating row:", error);
-
-    const extractErrorMessage = (error: any): string => {
-      if (!error) return "Unknown error";
-      if (typeof error === "string") return error;
-      if (error.message) return error.message;
-      if (error.errors) {
-        const messages = Object.values(error.errors)
-          .map((err: any) => err.message)
-          .join(", ");
-        return messages || "Validation error";
-      }
-      if (error.keyValue) {
-        return `Duplicate value for field(s): ${Object.keys(
-          error.keyValue
-        ).join(", ")}`;
-      }
-      return JSON.stringify(error);
-    };
-
-    const errorMessage = extractErrorMessage(error);
-
+    console.error("❌ Error updating row:", error);
     return res.status(500).json({
       success: false,
-      message: errorMessage,
+      message: error.message || "Error updating record",
     });
   }
 };
+
 
 export const getStaffAssignedData = async (req: Request, res: Response) => {
   try {
@@ -1657,6 +1593,8 @@ export const updateStaffRow = async (req: Request, res: Response) => {
     const {
       id,
       mobile,
+      whatsapp,
+      altMobNumber,
       name,
       status,
       remarkFirst,
@@ -1665,7 +1603,6 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       dataType,
       refferenceNumber,
       refferenceName,
-      // Register specific fields
       regPayment,
       serPayment,
       contactPersonName,
@@ -1683,9 +1620,6 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       jobType,
       preferJobs,
       religion,
-      star,
-      typeOfJathakam,
-      lookingFor,
       monthlyIncome,
       searchedHouses,
       maritalStatus,
@@ -1693,151 +1627,115 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       processing,
       serDate,
       profilePhoto,
+      // 🆕
+      caste,
+      star,
+      lookingFor,
+      typeOfJathakam,
+      houseType,
+      prefferedPlace,
+      prefferedSalary,
+      prefferedCourse,
+      priceRange,
     } = req.body;
 
-    if (!id) {
-      return res.status(400).json({
-        success: false,
-        message: "Record ID is required",
-      });
-    }
+    if (!id)
+      return res.status(400).json({ success: false, message: "Record ID is required" });
 
-    // Verify that the record belongs to the staff member
     const record = await Data.findOne({
       _id: id,
       assignedStaff: staffId,
       isDeleted: false,
     });
 
-    if (!record) {
+    if (!record)
       return res.status(403).json({
         success: false,
         message: "Record not found or not assigned to you.",
       });
-    }
 
-    if (mobile !== undefined || refferenceNumber !== undefined) {
-      if (
-        mobile !== undefined &&
-        refferenceNumber !== undefined &&
-        mobile === refferenceNumber
-      ) {
+    // ✅ Duplicate check (4 fields)
+    if (mobile || whatsapp || altMobNumber || refferenceNumber) {
+      const numbersToCheck = [mobile, whatsapp, altMobNumber, refferenceNumber].filter(Boolean);
+      const uniqueNumbers = new Set(numbersToCheck);
+      if (uniqueNumbers.size !== numbersToCheck.length) {
         return res.status(400).json({
           success: false,
-          message: "Mobile number and reference number cannot be the same.",
+          message: "Mobile, WhatsApp, Alternate, and Reference numbers cannot be identical.",
         });
       }
 
-      if (
-        mobile !== undefined &&
-        record.refferenceNumber &&
-        mobile === record.refferenceNumber
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Mobile number cannot be the same as the existing reference number in this record.",
-        });
-      }
+      const duplicateCheckQuery: any = { _id: { $ne: id }, $or: [] };
+      const isVisaType = record.data?.toLowerCase() === "visa";
+      if (!isVisaType) duplicateCheckQuery.data = record.data;
 
-      if (
-        refferenceNumber !== undefined &&
-        record.mobile &&
-        refferenceNumber === record.mobile
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Reference number cannot be the same as the existing mobile number in this record.",
-        });
-      }
-
-      const duplicateCheckQuery: {
-        _id: { $ne: string };
-        $or: Record<string, any>[];
-        data?: string;
-      } = {
-        _id: { $ne: id },
-        $or: [],
-      };
-
-      const isVisaType = record?.data?.toLowerCase() === "visa";
-      if (!isVisaType) {
-        duplicateCheckQuery.data = record?.data;
-      }
-
-      if (mobile !== undefined) {
+      numbersToCheck.forEach((num) => {
         duplicateCheckQuery.$or.push(
-          { mobile: mobile },
-          { refferenceNumber: mobile }
+          { mobile: num },
+          { whatsapp: num },
+          { altMobNumber: num },
+          { refferenceNumber: num }
         );
-      }
-
-      if (refferenceNumber !== undefined) {
-        duplicateCheckQuery.$or.push(
-          { mobile: refferenceNumber },
-          { refferenceNumber: refferenceNumber }
-        );
-      }
+      });
 
       const duplicateRecord = await Data.findOne(duplicateCheckQuery);
       if (duplicateRecord) {
         return res.status(400).json({
           success: false,
           message:
-            "Mobile number or reference number already exists in another record.",
+            "One of the numbers (Mobile / WhatsApp / Alternate / Reference) already exists in another record.",
         });
       }
     }
 
-    // Prepare update object with only provided fields
-    const updateFields: any = {};
-    if (mobile !== undefined) updateFields.mobile = mobile;
-    if (name !== undefined) updateFields.name = name;
-    if (status !== undefined) updateFields.status = status;
-    if (remarkFirst !== undefined) updateFields.remarkFirst = remarkFirst;
-    if (remarkSecond !== undefined) updateFields.remarkSecond = remarkSecond;
-    if (verified !== undefined) updateFields.verified = verified;
-    if (dataType !== undefined) updateFields.dataType = dataType;
-    if (refferenceNumber !== undefined)
-      updateFields.refferenceNumber = refferenceNumber;
-    if (refferenceName !== undefined)
-      updateFields.refferenceName = refferenceName;
+    const updateFields = {
+      mobile,
+      whatsapp,
+      altMobNumber,
+      name,
+      status,
+      remarkFirst,
+      remarkSecond,
+      verified,
+      dataType,
+      refferenceNumber,
+      refferenceName,
+      regPayment,
+      serPayment,
+      contactPersonName,
+      regReceived,
+      serReceived,
+      regBalance,
+      serBalance,
+      passportNo,
+      vSampleSend,
+      expectations,
+      district,
+      education,
+      preferCountry,
+      city,
+      jobType,
+      preferJobs,
+      religion,
+      monthlyIncome,
+      searchedHouses,
+      maritalStatus,
+      spokenLanguage,
+      processing,
+      serDate,
+      profilePhoto,
+      // 🆕 Newly added
+      caste,
+      star,
+      lookingFor,
+      typeOfJathakam,
+      houseType,
+      prefferedPlace,
+      prefferedSalary,
+      prefferedCourse,
+      priceRange,
+    };
 
-    // Register specific fields
-    if (regPayment !== undefined) updateFields.regPayment = regPayment;
-    if (serPayment !== undefined) updateFields.serPayment = serPayment;
-    if (contactPersonName !== undefined)
-      updateFields.contactPersonName = contactPersonName;
-    if (regReceived !== undefined) updateFields.regReceived = regReceived;
-    if (serReceived !== undefined) updateFields.serReceived = serReceived;
-    if (regBalance !== undefined) updateFields.regBalance = regBalance;
-    if (serBalance !== undefined) updateFields.serBalance = serBalance;
-    if (passportNo !== undefined) updateFields.passportNo = passportNo;
-    if (vSampleSend !== undefined) updateFields.vSampleSend = vSampleSend;
-    if (expectations !== undefined) updateFields.expectations = expectations;
-    if (district !== undefined) updateFields.district = district;
-    if (education !== undefined) updateFields.education = education;
-    if (preferCountry !== undefined) updateFields.preferCountry = preferCountry;
-    if (city !== undefined) updateFields.city = city;
-    if (jobType !== undefined) updateFields.jobType = jobType;
-    if (preferJobs !== undefined) updateFields.preferJobs = preferJobs;
-    if (religion !== undefined) updateFields.religion = religion;
-    if (monthlyIncome !== undefined) updateFields.monthlyIncome = monthlyIncome;
-    if (searchedHouses !== undefined)
-      updateFields.searchedHouses = searchedHouses;
-    if (maritalStatus !== undefined) updateFields.maritalStatus = maritalStatus;
-    if (spokenLanguage !== undefined)
-      updateFields.spokenLanguage = spokenLanguage;
-    if (processing !== undefined) updateFields.processing = processing;
-    if (serDate !== undefined) updateFields.serDate = serDate;
-    if (profilePhoto !== undefined) updateFields.profilePhoto = profilePhoto;
-    if (star !== undefined) updateFields.star = star;
-    if (typeOfJathakam !== undefined)
-      updateFields.typeOfJathakam = typeOfJathakam;
-    if (lookingFor !== undefined) updateFields.lookingFor = lookingFor;
-
-    // Update the record
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
@@ -1852,11 +1750,11 @@ export const updateStaffRow = async (req: Request, res: Response) => {
     console.error("Error updating staff row:", error);
     return res.status(500).json({
       success: false,
-      message: "Internal server error while updating record",
-      error: error.message,
+      message: error.message || "Error updating staff record",
     });
   }
 };
+
 
 export const getFormData = async (req: Request, res: Response) => {
   try {
