@@ -579,6 +579,7 @@ export const submitForm = async (req: Request, res: Response) => {
       caste,
       priceRange,
       visaType,
+      prefferedPlace,
     } = req.body;
 
     if (!name || !mobile) {
@@ -671,7 +672,6 @@ export const submitForm = async (req: Request, res: Response) => {
       createProfileFor,
       contactPersonName,
       houseType: req.body.houseType,
-      prefferedPlace: req.body.prefferedPlace,
       prefferedCourse: req.body.prefferedCourse,
       priceRange,
       caste,
@@ -684,6 +684,7 @@ export const submitForm = async (req: Request, res: Response) => {
       passportNo,
       aadharId,
       visaType,
+      prefferedPlace,
       isDeleted: false,
     });
 
@@ -757,6 +758,7 @@ export const updateForm = async (req: Request, res: Response) => {
       aadharId,
       priceRange,
       visaType,
+      prefferedPlace
     } = req.body;
 
     if (!trackingId) {
@@ -836,7 +838,8 @@ export const updateForm = async (req: Request, res: Response) => {
         passportNo,
         aadharId,
         priceRange,
-        visaType
+        visaType,
+        prefferedPlace
       });
 
       await newData.save();
@@ -895,7 +898,8 @@ export const updateForm = async (req: Request, res: Response) => {
       passportNo,
       aadharId,
       priceRange,
-      visaType
+      visaType,
+      prefferedPlace
     };
 
     Object.keys(updateFields).forEach((k) => {
