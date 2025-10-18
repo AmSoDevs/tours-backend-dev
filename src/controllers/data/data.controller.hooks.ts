@@ -2,18 +2,25 @@ import { Counter } from "../../models/Counter";
 import { Data } from "../../models/Data";
 
 const managetRegistrationPaymentUpdate = (oldData: any, newData: any) => {
-  if (oldData?.regPayment !== newData?.regPayment) {
+  const safeCompare = (a: any, b: any) =>
+    (a === undefined || a === null || a === "") &&
+    (b === undefined || b === null || b === "")
+      ? true
+      : String(a ?? "") === String(b ?? "");
+
+  if (!safeCompare(oldData?.regPayment, newData?.regPayment)) {
     newData.regPaymentUpdatedAt = new Date();
   }
 
-  if (oldData?.serPayment !== newData?.serPayment) {
+  if (!safeCompare(oldData?.serPayment, newData?.serPayment)) {
     newData.serPaymentUpdatedAt = new Date();
   }
 
-  if (oldData?.regReceived !== newData?.regReceived) {
+  if (!safeCompare(oldData?.regReceived, newData?.regReceived)) {
     newData.regReceivedUpdatedAt = new Date();
   }
-  if (oldData?.serReceived !== newData?.serReceived) {
+
+  if (!safeCompare(oldData?.serReceived, newData?.serReceived)) {
     newData.serReceivedUpdatedAt = new Date();
   }
 
