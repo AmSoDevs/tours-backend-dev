@@ -776,7 +776,6 @@ export const submitForm = async (req: Request, res: Response) => {
   }
 };
 
-
 export const updateForm = async (req: Request, res: Response) => {
   try {
     const {
@@ -1005,7 +1004,6 @@ export const updateForm = async (req: Request, res: Response) => {
   }
 };
 
-
 export const updateRow = async (req: Request, res: Response) => {
   try {
     const {
@@ -1061,26 +1059,23 @@ export const updateRow = async (req: Request, res: Response) => {
       createProfileFor,
     } = req.body;
 
-    if (!id)
-      return res
-        .status(400)
-        .json({ success: false, message: "Record ID is required" });
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Record ID is required",
+      });
+    }
 
     const existingRecord = await Data.findById(id);
-    if (!existingRecord)
-      return res
-        .status(404)
-        .json({ success: false, message: "Record not found" });
+    if (!existingRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "Record not found",
+      });
+    }
 
-    // ✅ Full duplicate check (4 fields)
-    const hasChanged =
-      (mobile && mobile !== existingRecord.mobile) ||
-      (whatsapp && whatsapp !== existingRecord.whatsapp) ||
-      (altMobNumber && altMobNumber !== existingRecord.altMobNumber) ||
-      (refferenceNumber &&
-        refferenceNumber !== existingRecord.refferenceNumber);
-
-    if (hasChanged) {
+    // ✅ Duplicate number validation
+    if (mobile || whatsapp || altMobNumber || refferenceNumber) {
       const numbersToCheck = [
         mobile,
         whatsapp,
@@ -1119,8 +1114,8 @@ export const updateRow = async (req: Request, res: Response) => {
       }
     }
 
-    // ✅ Prepare update fields
-    const updateFields = {
+    // ✅ Build updateFields
+    let updateFields: Record<string, any> = {
       mobile,
       whatsapp,
       altMobNumber,
@@ -1172,6 +1167,19 @@ export const updateRow = async (req: Request, res: Response) => {
       createProfileFor,
     };
 
+    // ✅ Remove undefined fields
+    Object.keys(updateFields).forEach((key) => {
+      const k = key as keyof typeof updateFields;
+      if (updateFields[k] === undefined) delete updateFields[k];
+    });
+
+    // ✅ Add timestamp fields if payment fields changed
+    updateFields = dataControllerHooks.managetRegistrationPaymentUpdate(
+      existingRecord,
+      updateFields
+    );
+
+    // ✅ Perform update
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
@@ -1739,7 +1747,6 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       processing,
       serDate,
       profilePhoto,
-      // 🆕
       caste,
       star,
       lookingFor,
@@ -1751,24 +1758,28 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       priceRange,
     } = req.body;
 
-    if (!id)
-      return res
-        .status(400)
-        .json({ success: false, message: "Record ID is required" });
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Record ID is required",
+      });
+    }
 
+    // ✅ Verify staff ownership
     const record = await Data.findOne({
       _id: id,
       assignedStaff: staffId,
       isDeleted: false,
     });
 
-    if (!record)
+    if (!record) {
       return res.status(403).json({
         success: false,
         message: "Record not found or not assigned to you.",
       });
+    }
 
-    // ✅ Duplicate check (4 fields)
+    // ✅ Duplicate number validation
     if (mobile || whatsapp || altMobNumber || refferenceNumber) {
       const numbersToCheck = [
         mobile,
@@ -1808,7 +1819,8 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       }
     }
 
-    const updateFields = {
+    // ✅ Build updateFields
+    let updateFields: Record<string, any> = {
       mobile,
       whatsapp,
       altMobNumber,
@@ -1844,7 +1856,6 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       processing,
       serDate,
       profilePhoto,
-      // 🆕 Newly added
       caste,
       star,
       lookingFor,
@@ -1856,6 +1867,19 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       priceRange,
     };
 
+    // ✅ Remove undefined fields
+    Object.keys(updateFields).forEach((key) => {
+      const k = key as keyof typeof updateFields;
+      if (updateFields[k] === undefined) delete updateFields[k];
+    });
+
+    // ✅ Add timestamp updates for payment fields
+    updateFields = dataControllerHooks.managetRegistrationPaymentUpdate(
+      record,
+      updateFields
+    );
+
+    // ✅ Update record
     const updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
       new: true,
       runValidators: true,
