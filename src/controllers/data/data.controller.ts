@@ -625,8 +625,8 @@ export const submitForm = async (req: Request, res: Response) => {
 
       if (
         duplicateRecord &&
-        form.status === "shared" &&
-        !duplicateRecord.isDuplicateAllowed
+        !duplicateRecord.isDuplicateAllowed &&
+        req.body.isDuplicateAllowed !== true
       ) {
         return res.status(400).json({
           success: false,
@@ -643,21 +643,29 @@ export const submitForm = async (req: Request, res: Response) => {
       isDeleted: false,
     });
 
-    // ✅ Step 3: Reuse bulk slNo/profileId if found
     let slNo, profileId;
+
+    // ✅ If a bulk record exists, always reuse its slNo
     if (existingBulk) {
       slNo = existingBulk.slNo;
-      profileId = existingBulk.profileId;
 
-      // Update the bulk record → mark as Success
-      await Data.findByIdAndUpdate(existingBulk._id, {
-        $set: {
-          status: "Success",
-          reminderDateAndTime: new Date(),
-        },
-      });
+      // 🔹 If duplicates are allowed → generate new profileId
+      if (isDuplicateAllowed) {
+        profileId =
+          await dataControllerHooks.createRegistrationUniqueSerialNumber(
+            form.formType
+          );
+      } else {
+        // 🔹 Otherwise reuse the same profileId
+        profileId = existingBulk.profileId;
+
+        // ✅ Mark bulk record as Success (normal case)
+        await Data.findByIdAndUpdate(existingBulk._id, {
+          $set: { status: "Success", reminderDateAndTime: new Date() },
+        });
+      }
     } else {
-      // ✅ Use prefix-based generator for slNo & profileId
+      // ✅ For brand new records (no bulk found)
       slNo = await dataControllerHooks.createRegistrationUniqueSerialNumber(
         form.formType
       );
@@ -857,7 +865,11 @@ export const updateForm = async (req: Request, res: Response) => {
       recordToUpdate?._id?.toString()
     );
 
-    if (duplicateRecord && !duplicateRecord.isDuplicateAllowed) {
+    if (
+      duplicateRecord &&
+      !duplicateRecord.isDuplicateAllowed &&
+      req.body.isDuplicateAllowed !== true
+    ) {
       return res.status(400).json({
         success: false,
         message:
@@ -1092,6 +1104,7 @@ export const updateRow = async (req: Request, res: Response) => {
         altMobNumber,
         refferenceNumber,
       ].filter(Boolean);
+
       const uniqueNumbers = new Set(numbersToCheck);
       if (uniqueNumbers.size !== numbersToCheck.length) {
         return res.status(400).json({
@@ -1115,14 +1128,21 @@ export const updateRow = async (req: Request, res: Response) => {
       });
 
       const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-      if (duplicateRecord && !duplicateRecord.isDuplicateAllowed) {
+
+      // ✅ Allow if either current record OR duplicate record OR payload allows duplicates
+      if (
+        duplicateRecord &&
+        !duplicateRecord.isDuplicateAllowed &&
+        !existingRecord.isDuplicateAllowed &&
+        req.body.isDuplicateAllowed !== true
+      ) {
         return res.status(400).json({
           success: false,
           message:
             "Duplicate number found in another record, and duplicates are not allowed.",
         });
       }
-    }
+    } // <-- ✅ this was missing earlier (closes the duplicate validation block)
 
     // ✅ Build updateFields
     let updateFields: Record<string, any> = {
@@ -1799,6 +1819,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         altMobNumber,
         refferenceNumber,
       ].filter(Boolean);
+
       const uniqueNumbers = new Set(numbersToCheck);
       if (uniqueNumbers.size !== numbersToCheck.length) {
         return res.status(400).json({
@@ -1822,14 +1843,21 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       });
 
       const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-      if (duplicateRecord && !duplicateRecord.isDuplicateAllowed) {
+
+      // ✅ Allow if either current record OR duplicate record OR payload allows duplicates
+      if (
+        duplicateRecord &&
+        !duplicateRecord.isDuplicateAllowed &&
+        !record.isDuplicateAllowed &&
+        req.body.isDuplicateAllowed !== true
+      ) {
         return res.status(400).json({
           success: false,
           message:
             "Duplicate number found in another record, and duplicates are not allowed.",
         });
       }
-    }
+    } // ✅ closes duplicate validation block
 
     // ✅ Build updateFields
     let updateFields: Record<string, any> = {

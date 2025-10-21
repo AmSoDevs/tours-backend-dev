@@ -152,10 +152,18 @@ const DataSchema = new Schema<DataDocument>(
   { timestamps: true }
 );
 
-DataSchema.index({ data: 1, mobile: 1 }, { unique: true });
-DataSchema.index({ data: 1, slNo: 1 }, { unique: true });
-DataSchema.index({ data: 1, profileId: 1 }, { unique: true });
-
+DataSchema.index(
+  { data: 1, mobile: 1 },
+  { unique: true, partialFilterExpression: { isDuplicateAllowed: false } }
+);
+DataSchema.index(
+  { data: 1, slNo: 1 },
+  { unique: true, partialFilterExpression: { isDuplicateAllowed: false } }
+);
+DataSchema.index(
+  { data: 1, profileId: 1 },
+  { unique: true, partialFilterExpression: { isDuplicateAllowed: false } }
+);
 
 export const Data: Model<DataDocument> =
   mongoose.models.Data || mongoose.model<DataDocument>("Data", DataSchema);
