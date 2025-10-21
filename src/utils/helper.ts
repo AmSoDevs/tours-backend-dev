@@ -1,7 +1,21 @@
+import { Counter } from "../models/Counter";
 import { Data } from "../models/Data";
 import { FormTracking } from "../models/FormTracking";
 import { Staff } from "../models/Staff";
 import { StaffAssignment } from "../models/StaffAssignment";
+
+export const generatePrefixedProfileId = async (
+  prefix: string
+): Promise<string> => {
+  const counter = await Counter.findOneAndUpdate(
+    { prefix },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  );
+
+  const seqNum = counter.seq.toString().padStart(6, "0");
+  return `${prefix.toUpperCase()}${seqNum}`;
+};
 
 export const generateUniqueSlNo = async (): Promise<string> => {
   try {

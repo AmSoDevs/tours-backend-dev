@@ -152,17 +152,39 @@ const DataSchema = new Schema<DataDocument>(
   { timestamps: true }
 );
 
+// ✅ Allow same mobile across different data categories (register, visa, etc.)
+// ✅ Allow same mobile across different form types (register, visa, etc.)
 DataSchema.index(
   { data: 1, mobile: 1 },
-  { unique: true, partialFilterExpression: { isDuplicateAllowed: false } }
+  {
+    unique: true,
+    partialFilterExpression: {
+      isDuplicateAllowed: false,
+      isDeleted: false, // ✅ don’t block with deleted records
+    },
+  }
 );
+
 DataSchema.index(
   { data: 1, slNo: 1 },
-  { unique: true, partialFilterExpression: { isDuplicateAllowed: false } }
+  {
+    unique: true,
+    partialFilterExpression: {
+      isDuplicateAllowed: false,
+      isDeleted: false,
+    },
+  }
 );
+
 DataSchema.index(
   { data: 1, profileId: 1 },
-  { unique: true, partialFilterExpression: { isDuplicateAllowed: false } }
+  {
+    unique: true,
+    partialFilterExpression: {
+      isDuplicateAllowed: false,
+      isDeleted: false,
+    },
+  }
 );
 
 export const Data: Model<DataDocument> =
