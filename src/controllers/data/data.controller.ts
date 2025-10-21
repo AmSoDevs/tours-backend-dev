@@ -600,6 +600,7 @@ export const submitForm = async (req: Request, res: Response) => {
       isDuplicateAllowed,
     } = req.body;
 
+    // ✅ Basic validation
     if (!name || !mobile) {
       return res.status(400).json({
         success: false,
@@ -607,6 +608,7 @@ export const submitForm = async (req: Request, res: Response) => {
       });
     }
 
+    // ✅ Validate form tracking
     const form = await FormTracking.findOne({ trackingId });
     if (!form) {
       return res.status(400).json({
@@ -617,6 +619,7 @@ export const submitForm = async (req: Request, res: Response) => {
 
     const isMultipleAllowed = form.allowMultiple === true;
 
+    // ✅ Step 1: Prevent unwanted duplicates if multiple not allowed
     if (!isMultipleAllowed) {
       const duplicateRecord = await checkDuplicateNumbers(
         { mobile, whatsapp, altMobNumber },
@@ -636,7 +639,7 @@ export const submitForm = async (req: Request, res: Response) => {
       }
     }
 
-    // ✅ Step 2: Try finding bulk source record
+    // ✅ Step 2: Find existing bulk record (if exists)
     const existingBulk = await Data.findOne({
       data: "bulk",
       $or: [{ mobile }, { refferenceNumber: mobile }],
@@ -645,34 +648,31 @@ export const submitForm = async (req: Request, res: Response) => {
 
     let slNo, profileId;
 
-    // ✅ If a bulk record exists, always reuse its slNo
     if (existingBulk) {
+      // 🔹 Reuse bulk's slNo for continuity
       slNo = existingBulk.slNo;
 
-      // 🔹 If duplicates are allowed → generate new profileId
-      if (isDuplicateAllowed) {
-        profileId =
-          await dataControllerHooks.createRegistrationUniqueSerialNumber(
-            form.formType
-          );
-      } else {
-        // 🔹 Otherwise reuse the same profileId
-        profileId = existingBulk.profileId;
+      // 🔹 Always generate a NEW profile ID sequentially (even if duplicates are false)
+      profileId =
+        await dataControllerHooks.createRegistrationUniqueSerialNumber(
+          form.formType
+        );
 
-        // ✅ Mark bulk record as Success (normal case)
+      // 🔹 Only mark bulk as "Success" if duplicates are NOT allowed
+      if (!isDuplicateAllowed) {
         await Data.findByIdAndUpdate(existingBulk._id, {
           $set: { status: "Success", reminderDateAndTime: new Date() },
         });
       }
     } else {
-      // ✅ For brand new records (no bulk found)
+      // 🔹 No bulk record → new slNo and profileId
       slNo = await dataControllerHooks.createRegistrationUniqueSerialNumber(
         form.formType
       );
       profileId = slNo;
     }
 
-    // ✅ Step 4: Assign staff
+    // ✅ Step 3: Assign staff
     let assignedStaff: any;
     if (form.staffId) {
       assignedStaff = form.staffId;
@@ -695,11 +695,11 @@ export const submitForm = async (req: Request, res: Response) => {
       assignedStaff = assignedStaffId;
     }
 
-    // ✅ Step 5: Create new register record (reuse serials if bulk found)
+    // ✅ Step 4: Create new record
     const newData = new Data({
       slNo,
       profileId,
-      data: form.formType, // e.g., "register", "matrimony", "house"
+      data: form.formType, // e.g. register / matrimony / house
       dataType: "self",
       name,
       mobile,
@@ -741,20 +741,18 @@ export const submitForm = async (req: Request, res: Response) => {
 
     await newData.save();
 
-    // ✅ Step 6: Update FormTracking
+    // ✅ Step 5: Update FormTracking progress
+    form.status = "in_progress";
+    form.currentStep = 1;
+
     if (!isMultipleAllowed) {
-      form.status = "in_progress";
       form.dataId = newData._id;
-      form.currentStep = 1;
       if (!form.staffId) form.staffId = assignedStaff;
-      await form.save();
-    } else {
-      form.status = "in_progress";
-      form.currentStep = 1;
-      await form.save();
     }
 
-    // ✅ Step 7: Mirror basic info back to bulk for auto-fill convenience
+    await form.save();
+
+    // ✅ Step 6: Mirror key info back to bulk record (for auto-fill UI)
     if (existingBulk) {
       const mirrorFields = {
         name,
@@ -773,6 +771,7 @@ export const submitForm = async (req: Request, res: Response) => {
       await Data.findByIdAndUpdate(existingBulk._id, { $set: mirrorFields });
     }
 
+    // ✅ Final Response
     return res.status(201).json({
       success: true,
       message: existingBulk
@@ -781,7 +780,7 @@ export const submitForm = async (req: Request, res: Response) => {
       data: newData,
     });
   } catch (error: any) {
-    console.error("Error submitting form:", error);
+    console.error("❌ Error submitting form:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error while submitting form",
@@ -1129,20 +1128,32 @@ export const updateRow = async (req: Request, res: Response) => {
 
       const duplicateRecord = await Data.findOne(duplicateCheckQuery);
 
-      // ✅ Allow if either current record OR duplicate record OR payload allows duplicates
-      if (
-        duplicateRecord &&
-        !duplicateRecord.isDuplicateAllowed &&
-        !existingRecord.isDuplicateAllowed &&
-        req.body.isDuplicateAllowed !== true
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Duplicate number found in another record, and duplicates are not allowed.",
-        });
+      if (duplicateRecord) {
+        const sameSlNo = duplicateRecord.slNo === existingRecord.slNo;
+
+        // 🧩 Case 1: Same slNo → allow if duplicates are allowed
+        if (sameSlNo) {
+          if (
+            !duplicateRecord.isDuplicateAllowed &&
+            !existingRecord.isDuplicateAllowed &&
+            req.body.isDuplicateAllowed !== true
+          ) {
+            return res.status(400).json({
+              success: false,
+              message:
+                "Duplicate number found in another record under the same serial number, and duplicates are not allowed.",
+            });
+          }
+        } else {
+          // 🧩 Case 2: Different slNo → always block duplicates
+          return res.status(400).json({
+            success: false,
+            message:
+              "This number already exists in a different serial number record. Duplicates across different serial numbers are not allowed.",
+          });
+        }
       }
-    } // <-- ✅ this was missing earlier (closes the duplicate validation block)
+    } // ✅ closes duplicate validation block properly
 
     // ✅ Build updateFields
     let updateFields: Record<string, any> = {
@@ -1229,6 +1240,7 @@ export const updateRow = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const getStaffAssignedData = async (req: Request, res: Response) => {
   try {
@@ -1844,18 +1856,30 @@ export const updateStaffRow = async (req: Request, res: Response) => {
 
       const duplicateRecord = await Data.findOne(duplicateCheckQuery);
 
-      // ✅ Allow if either current record OR duplicate record OR payload allows duplicates
-      if (
-        duplicateRecord &&
-        !duplicateRecord.isDuplicateAllowed &&
-        !record.isDuplicateAllowed &&
-        req.body.isDuplicateAllowed !== true
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Duplicate number found in another record, and duplicates are not allowed.",
-        });
+      if (duplicateRecord) {
+        const sameSlNo = duplicateRecord.slNo === record.slNo;
+
+        // 🧩 Case 1: Same slNo → allow only if duplicates are allowed
+        if (sameSlNo) {
+          if (
+            !duplicateRecord.isDuplicateAllowed &&
+            !record.isDuplicateAllowed &&
+            req.body.isDuplicateAllowed !== true
+          ) {
+            return res.status(400).json({
+              success: false,
+              message:
+                "Duplicate number found in another record under the same serial number, and duplicates are not allowed.",
+            });
+          }
+        } else {
+          // 🧩 Case 2: Different slNo → always block duplicates
+          return res.status(400).json({
+            success: false,
+            message:
+              "This number already exists in a different serial number record. Duplicates across different serial numbers are not allowed.",
+          });
+        }
       }
     } // ✅ closes duplicate validation block
 
@@ -1939,6 +1963,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const getFormData = async (req: Request, res: Response) => {
   try {
