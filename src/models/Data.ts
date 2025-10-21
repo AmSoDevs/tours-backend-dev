@@ -17,6 +17,7 @@ export interface DataDocument extends Document {
   remarkSecond: string;
   assignedStaff: Types.ObjectId;
   isDeleted: boolean;
+  isDuplicateAllowed: boolean;
   reminderDateAndTime?: Date;
   callClickTime?: Date;
   whatsappClickTime?: Date;
@@ -91,6 +92,7 @@ const DataSchema = new Schema<DataDocument>(
       ref: "Staff",
       required: true,
     },
+    isDuplicateAllowed: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false, index: true },
     reminderDateAndTime: { type: Date },
     callClickTime: { type: Date },

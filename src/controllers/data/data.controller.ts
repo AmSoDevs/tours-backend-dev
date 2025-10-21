@@ -597,6 +597,7 @@ export const submitForm = async (req: Request, res: Response) => {
       priceRange,
       visaType,
       prefferedPlace,
+      isDuplicateAllowed,
     } = req.body;
 
     if (!name || !mobile) {
@@ -616,17 +617,21 @@ export const submitForm = async (req: Request, res: Response) => {
 
     const isMultipleAllowed = form.allowMultiple === true;
 
-    // ✅ Step 1: Check duplicate numbers
     if (!isMultipleAllowed) {
       const duplicateRecord = await checkDuplicateNumbers(
         { mobile, whatsapp, altMobNumber },
         form.formType
       );
-      if (duplicateRecord && form.status === "shared") {
+
+      if (
+        duplicateRecord &&
+        form.status === "shared" &&
+        !duplicateRecord.isDuplicateAllowed
+      ) {
         return res.status(400).json({
           success: false,
           message:
-            "One of the numbers (mobile / WhatsApp / alternate) already exists in another record.",
+            "One of the numbers (mobile / WhatsApp / alternate) already exists in another record and duplicates are not allowed.",
         });
       }
     }
@@ -722,6 +727,7 @@ export const submitForm = async (req: Request, res: Response) => {
       aadharId,
       visaType,
       prefferedPlace,
+      isDuplicateAllowed,
       isDeleted: false,
     });
 
@@ -814,6 +820,7 @@ export const updateForm = async (req: Request, res: Response) => {
       priceRange,
       visaType,
       prefferedPlace,
+      isDuplicateAllowed,
     } = req.body;
 
     if (!trackingId) {
@@ -850,11 +857,11 @@ export const updateForm = async (req: Request, res: Response) => {
       recordToUpdate?._id?.toString()
     );
 
-    if (duplicateRecord) {
+    if (duplicateRecord && !duplicateRecord.isDuplicateAllowed) {
       return res.status(400).json({
         success: false,
         message:
-          "One of the numbers (mobile / WhatsApp / alternate) already exists in another record.",
+          "Duplicate number found in another record, and duplicates are not allowed.",
       });
     }
 
@@ -894,6 +901,7 @@ export const updateForm = async (req: Request, res: Response) => {
         priceRange,
         visaType,
         prefferedPlace,
+        isDuplicateAllowed,
       });
 
       await newData.save();
@@ -953,6 +961,7 @@ export const updateForm = async (req: Request, res: Response) => {
       priceRange,
       visaType,
       prefferedPlace,
+      isDuplicateAllowed,
     };
 
     Object.keys(updateFields).forEach((k) => {
@@ -1057,6 +1066,7 @@ export const updateRow = async (req: Request, res: Response) => {
       profilePhoto,
       aadharId,
       createProfileFor,
+      isDuplicateAllowed,
     } = req.body;
 
     if (!id) {
@@ -1105,11 +1115,11 @@ export const updateRow = async (req: Request, res: Response) => {
       });
 
       const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-      if (duplicateRecord) {
+      if (duplicateRecord && !duplicateRecord.isDuplicateAllowed) {
         return res.status(400).json({
           success: false,
           message:
-            "One of the numbers (Mobile / WhatsApp / Alternate / Reference) already exists in another record.",
+            "Duplicate number found in another record, and duplicates are not allowed.",
         });
       }
     }
@@ -1165,6 +1175,7 @@ export const updateRow = async (req: Request, res: Response) => {
       profilePhoto,
       aadharId,
       createProfileFor,
+      isDuplicateAllowed,
     };
 
     // ✅ Remove undefined fields
@@ -1756,6 +1767,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       prefferedSalary,
       prefferedCourse,
       priceRange,
+      isDuplicateAllowed,
     } = req.body;
 
     if (!id) {
@@ -1810,11 +1822,11 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       });
 
       const duplicateRecord = await Data.findOne(duplicateCheckQuery);
-      if (duplicateRecord) {
+      if (duplicateRecord && !duplicateRecord.isDuplicateAllowed) {
         return res.status(400).json({
           success: false,
           message:
-            "One of the numbers (Mobile / WhatsApp / Alternate / Reference) already exists in another record.",
+            "Duplicate number found in another record, and duplicates are not allowed.",
         });
       }
     }
@@ -1865,6 +1877,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       prefferedSalary,
       prefferedCourse,
       priceRange,
+      isDuplicateAllowed,
     };
 
     // ✅ Remove undefined fields
