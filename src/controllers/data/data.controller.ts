@@ -164,21 +164,14 @@ export const getData = async (req: Request, res: Response) => {
       query.reminderDateAndTime = { $ne: null };
 
     if (dataType && dataType !== "all") {
-      if (dataType.toLowerCase() === "bulk") {
-        query.$or = [{ data: /bulk/i }, { status: /success/i }];
-      } else {
-        query.data = { $regex: dataType, $options: "i" };
-      }
+      query.data = { $regex: dataType, $options: "i" };
     }
 
     if (staffId && staffId !== "all") query.assignedStaff = staffId;
-
     if (status && status !== "all")
       query.status = { $regex: status, $options: "i" };
-
-    if (dataFilter && dataFilter !== "all") {
+    if (dataFilter && dataFilter !== "all")
       query.data = { $regex: dataFilter, $options: "i" };
-    }
 
     if (search && search !== "") {
       const searchRegex = { $regex: search, $options: "i" };
@@ -215,122 +208,73 @@ export const getData = async (req: Request, res: Response) => {
     const field = sortFieldMap[sortBy] || "createdAt";
     sortObj[field] = sortOrder === "desc" ? -1 : 1;
 
-    const skip = (Number(page) - 1) * Number(limit || 0);
+    const skip = (page - 1) * (limit || 0);
 
-    // ✅ Fetch paginated data
-    const data = await Data.find(query)
+    // ✅ Fetch all main data (bulk + normal)
+    let data = await Data.find(query)
       .populate("assignedStaff", "name staffId")
       .populate("files")
       .sort(sortObj)
       .skip(skip)
-      .limit(limit ? Number(limit) : 0);
+      .limit(limit ? limit : 0);
 
     const total = await Data.countDocuments(query);
+
+    // ✅ STEP 1: Find bulk records
+    const bulkRecords = data.filter((r) => r.data?.toLowerCase() === "bulk");
+
+    if (bulkRecords.length > 0) {
+      const slNos = bulkRecords.map((r) => r.slNo);
+
+      // ✅ STEP 2: Find linked non-bulk records for those slNos
+      const linkedRecords = await Data.find({
+        slNo: { $in: slNos },
+        data: { $ne: "bulk" },
+        isDeleted: false,
+      }).select("_id slNo");
+
+      const linkedIds = linkedRecords.map((r) => r._id);
+
+      // ✅ STEP 3: Check which of these linked forms are fully completed in FormTracking
+      const completedTrackings = await FormTracking.find({
+        dataId: { $in: linkedIds },
+        status: { $regex: /^submitted$/i },
+      }).select("dataId");
+
+      // ✅ Safely extract IDs (TypeScript safe)
+      const completedIds = new Set(
+        completedTrackings
+          .filter((f) => !!f.dataId)
+          .map((f) => f.dataId!.toString())
+      );
+
+      // ✅ STEP 4: Get slNos of completed forms
+      const completedSlNos = linkedRecords
+        .filter((r) => completedIds.has(r._id.toString()))
+        .map((r) => r.slNo);
+
+      const completedSlNoSet = new Set(completedSlNos);
+
+      // ✅ STEP 5: Hide completed bulk records
+      data = data.filter((r) => {
+        const isBulk = r.data?.toLowerCase() === "bulk";
+        if (isBulk && completedSlNoSet.has(r.slNo)) return false;
+        return true;
+      });
+    }
+
+    // ✅ Pagination
     const pagination = {
-      currentPage: Number(page),
-      totalPages: limit ? Math.ceil(total / Number(limit)) : 1,
+      currentPage: page,
+      totalPages: limit ? Math.ceil(total / limit) : 1,
       totalRecords: total,
-      limit: Number(limit) || total,
+      limit: limit || total,
     };
 
-    // ✅ Collect all mobile numbers to reduce queries
-    const mobiles = data
-      .map((r) => [r.mobile, r.refferenceNumber])
-      .flat()
-      .filter(Boolean);
-
-    // ✅ Fetch all records with same mobile/references
-    const relatedRecords = await Data.find({
-      $or: [
-        { mobile: { $in: mobiles } },
-        { refferenceNumber: { $in: mobiles } },
-      ],
-      isDeleted: false,
-    }).select("mobile refferenceNumber data");
-
-    // ✅ Process each record
-    const updatedData = await Promise.all(
-      data.map(async (record: any) => {
-        const recordMobile = record.mobile?.trim() || "";
-        const recordRef = record.refferenceNumber?.trim() || "";
-
-        // 🧩 find all data types linked to this person
-        const related = relatedRecords.filter(
-          (r) =>
-            r.mobile === recordMobile ||
-            r.refferenceNumber === recordMobile ||
-            r.mobile === recordRef ||
-            r.refferenceNumber === recordRef
-        );
-
-        const extraCategories = [
-          ...new Set(
-            related
-              .map((r) => r.data)
-              .filter(
-                (d) => d && d.toLowerCase() !== record.data?.toLowerCase() // exclude self
-              )
-          ),
-        ];
-
-        const dataType = record.data?.toLowerCase() || "";
-        const isBulk = dataType === "bulk";
-        const isRegister = dataType === "register";
-
-        const mobile = String(record.mobile || "").trim();
-        const referenceNumber = String(record.refferenceNumber || "").trim();
-
-        let isReferenceRegistered = false;
-        let isBulkRegistered = false;
-        let isConverted = false;
-
-        if (referenceNumber) {
-          const registeredRef = await Data.findOne({
-            $or: [
-              { mobile: referenceNumber },
-              { refferenceNumber: referenceNumber },
-            ],
-            data: "register",
-            isDeleted: false,
-          });
-          if (registeredRef) isReferenceRegistered = true;
-        }
-
-        if (mobile) {
-          const selfRegistered = await Data.findOne({
-            $or: [{ mobile }, { refferenceNumber: mobile }],
-            data: "register",
-            isDeleted: false,
-          });
-          if (selfRegistered) isBulkRegistered = true;
-        }
-
-        if (isBulk && record.status?.toLowerCase() === "success") {
-          const linkedRegister = await Data.findOne({
-            data: { $ne: "bulk" },
-            slNo: record.slNo,
-            profileId: record.profileId,
-            isDeleted: false,
-          });
-          if (linkedRegister) isConverted = true;
-        }
-
-        return {
-          ...record.toObject(),
-          isBulk,
-          isRegister,
-          isReferenceRegistered,
-          isBulkRegistered,
-          isConverted,
-          extraCategories, // ✅ added key
-        };
-      })
-    );
-
-    // ✅ Return with pagination
+    // ✅ Return response
     return res.status(200).json({
       success: true,
-      data: updatedData,
+      data,
       pagination,
     });
   } catch (error: any) {
@@ -1149,7 +1093,7 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
   try {
     const { id: staffId } = req.params;
 
-    // 🔹 Safely cast all query params to string
+    // 🔹 Query params
     const page = Number(req.query.page) || 1;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     const dataType = String(req.query.dataType || "");
@@ -1162,25 +1106,21 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     const endDate = String(req.query.endDate || "");
     const type = String(req.query.type || "all");
 
+    // 🔹 Base query: only data assigned to this staff
     const query: any = {
       isDeleted: false,
       assignedStaff: staffId,
     };
 
-    // 🔹 Apply filters
-    if (dataType && dataType !== "all") {
+    // 🔹 Filters
+    if (dataType && dataType !== "all")
       query.dataType = { $regex: dataType, $options: "i" };
-    }
-
-    if (status && status !== "all") {
+    if (status && status !== "all")
       query.status = { $regex: status, $options: "i" };
-    }
-
-    if (dataFilter && dataFilter !== "all") {
+    if (dataFilter && dataFilter !== "all")
       query.data = { $regex: dataFilter, $options: "i" };
-    }
 
-    // 🔹 Date range filter
+    // 🔹 Date filter
     const isValidDate = (d: string): boolean =>
       !!d && !isNaN(new Date(d).getTime());
     if (isValidDate(startDate) || isValidDate(endDate)) {
@@ -1191,7 +1131,7 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       query.createdAt = dateFilter;
     }
 
-    // 🔹 Search logic
+    // 🔹 Search
     if (search && search !== "") {
       const searchRegex = { $regex: search, $options: "i" };
       query.$or = [
@@ -1205,7 +1145,7 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       ];
     }
 
-    // 🔹 Sorting
+    // 🔹 Sort
     const sortObj: any = {};
     const sortFieldMap: any = {
       createdAt: "createdAt",
@@ -1219,41 +1159,109 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     const field = sortFieldMap[sortBy] || "createdAt";
     sortObj[field] = sortOrder === "desc" ? -1 : 1;
 
-    // 🔹 Pagination
     const skip = (page - 1) * (limit || 0);
 
-    const data = await Data.find(query)
+    // ✅ Step 1: Fetch assigned data
+    let data = await Data.find(query)
       .populate("assignedStaff", "name staffId")
       .sort(sortObj)
       .skip(skip)
       .limit(limit ? limit : 0);
 
     const total = await Data.countDocuments(query);
-    const pagination = {
-      currentPage: page,
-      totalPages: limit ? Math.ceil(total / limit) : 1,
-      totalRecords: total,
-      limit: limit || total,
-    };
 
-    // 🔹 Add flags: isBulk, isRegister, isReferenceRegistered, isBulkRegistered
+    // ✅ Step 2: Collect all mobile/references to fetch related records
+    const mobiles = data
+      .map((r) => [r.mobile, r.refferenceNumber])
+      .flat()
+      .filter(Boolean);
+
+    const relatedRecords = await Data.find({
+      $or: [
+        { mobile: { $in: mobiles } },
+        { refferenceNumber: { $in: mobiles } },
+      ],
+      isDeleted: false,
+    }).select("mobile refferenceNumber data");
+
+    // ✅ Step 3: Find all bulk records for filtering
+    const bulkRecords = data.filter((r) => r.data?.toLowerCase() === "bulk");
+
+    if (bulkRecords.length > 0) {
+      const slNos = bulkRecords.map((r) => r.slNo);
+
+      // Linked non-bulk records
+      const linkedRecords = await Data.find({
+        slNo: { $in: slNos },
+        data: { $ne: "bulk" },
+        isDeleted: false,
+      }).select("_id slNo");
+
+      const linkedIds = linkedRecords.map((r) => r._id);
+
+      // Completed form tracking
+      const completedTrackings = await FormTracking.find({
+        dataId: { $in: linkedIds },
+        status: { $regex: /^submitted$/i },
+      }).select("dataId");
+
+      const completedIds = new Set(
+        completedTrackings
+          .filter((f) => !!f.dataId)
+          .map((f) => f.dataId!.toString())
+      );
+
+      const completedSlNos = linkedRecords
+        .filter((r) => completedIds.has(r._id.toString()))
+        .map((r) => r.slNo);
+
+      const completedSlNoSet = new Set(completedSlNos);
+
+      // ✅ Step 4: Hide bulk records that are fully completed
+      data = data.filter((r) => {
+        const isBulk = r.data?.toLowerCase() === "bulk";
+        if (isBulk && completedSlNoSet.has(r.slNo)) return false;
+        return true;
+      });
+    }
+
+    // ✅ Step 5: Compute derived flags & extra categories
     const updatedData = await Promise.all(
       data.map(async (record: any) => {
         const dataType = record.data?.toLowerCase() || "";
         const isBulk = dataType === "bulk";
         const isRegister = dataType === "register";
 
-        const mobile = String(record.mobile || "").trim();
-        const referenceNumber = String(record.refferenceNumber || "").trim();
+        const recordMobile = record.mobile?.trim() || "";
+        const recordRef = record.refferenceNumber?.trim() || "";
+
+        // Find related categories (visa, job, matrimony, etc.)
+        const related = relatedRecords.filter(
+          (r) =>
+            r.mobile === recordMobile ||
+            r.refferenceNumber === recordMobile ||
+            r.mobile === recordRef ||
+            r.refferenceNumber === recordRef
+        );
+
+        const extraCategories = [
+          ...new Set(
+            related
+              .map((r) => r.data)
+              .filter(
+                (d) => d && d.toLowerCase() !== record.data?.toLowerCase()
+              )
+          ),
+        ];
 
         let isReferenceRegistered = false;
         let isBulkRegistered = false;
 
-        if (referenceNumber) {
+        if (record.refferenceNumber) {
           const registeredRef = await Data.findOne({
             $or: [
-              { mobile: referenceNumber },
-              { refferenceNumber: referenceNumber },
+              { mobile: record.refferenceNumber },
+              { refferenceNumber: record.refferenceNumber },
             ],
             data: "register",
             isDeleted: false,
@@ -1261,9 +1269,9 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
           if (registeredRef) isReferenceRegistered = true;
         }
 
-        if (mobile) {
+        if (record.mobile) {
           const selfRegistered = await Data.findOne({
-            $or: [{ mobile }, { refferenceNumber: mobile }],
+            $or: [{ mobile: record.mobile }, { refferenceNumber: record.mobile }],
             data: "register",
             isDeleted: false,
           });
@@ -1276,11 +1284,12 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
           isRegister,
           isReferenceRegistered,
           isBulkRegistered,
+          extraCategories,
         };
       })
     );
 
-    // 🔹 Apply type filter logic (new/old)
+    // ✅ Step 6: Type filter (new / old)
     let filteredData = updatedData;
     if (type === "old") {
       filteredData = updatedData.filter(
@@ -1292,12 +1301,13 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       );
     }
 
-    // 🔹 Status filter (apply last to include flags)
-    if (status && status.toLowerCase() !== "all") {
-      filteredData = filteredData.filter(
-        (r) => r.status?.toLowerCase() === status.toLowerCase()
-      );
-    }
+    // ✅ Step 7: Pagination response
+    const pagination = {
+      currentPage: page,
+      totalPages: limit ? Math.ceil(total / limit) : 1,
+      totalRecords: total,
+      limit: limit || total,
+    };
 
     return res.status(200).json({
       success: true,
@@ -1313,6 +1323,7 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 // Staff-specific update functions that verify data ownership
 export const updateStaffDataStatus = async (req: Request, res: Response) => {
@@ -1665,6 +1676,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       });
     }
 
+    // ✅ Verify record ownership
     const record = await Data.findOne({
       _id: id,
       assignedStaff: staffId,
@@ -1678,22 +1690,23 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Prepare fields safely
+    // ✅ Prepare update fields safely
     let updateFields: Record<string, any> = { ...req.body };
     Object.keys(updateFields).forEach((key) => {
       if (updateFields[key] === undefined) delete updateFields[key];
     });
 
-    // ✅ Prevent reindexing unchanged unique fields
+    // ✅ Prevent re-indexing unchanged unique fields
     if (updateFields.mobile === record.mobile) delete updateFields.mobile;
     if (updateFields.data === record.data) delete updateFields.data;
 
-    // ✅ Apply payment timestamp logic
+    // ✅ Apply payment auto-timestamping logic
     updateFields = dataControllerHooks.managetRegistrationPaymentUpdate(
       record,
       updateFields
     );
 
+    // ✅ Attempt safe update with duplicate handling
     let updatedRecord;
     try {
       updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
@@ -1711,13 +1724,66 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       throw error;
     }
 
+    // ✅ STEP 2: Sync core user details across linked records
+    if (updatedRecord) {
+      const syncFields = [
+        "name",
+        "mobile",
+        "whatsapp",
+        "altMobNumber",
+        "gender",
+        "religion",
+        "caste",
+        "education",
+        "district",
+        "city",
+        "maritalStatus",
+        "expectations",
+        "jobType",
+        "monthlyIncome",
+        "preferCountry",
+        "preferJobs",
+        "visaType",
+        "searchedHouses",
+        "prefferedPlace",
+        "prefferedSalary",
+        "priceRange",
+      ];
+
+      const recordObj = updatedRecord.toObject();
+      const syncData: Record<string, any> = {};
+
+      for (const field of syncFields) {
+        if (recordObj[field as keyof typeof recordObj] !== undefined) {
+          syncData[field] = recordObj[field as keyof typeof recordObj];
+        }
+      }
+
+      // 🔹 Sync to bulk record (if exists)
+      await Data.updateMany(
+        { slNo: updatedRecord.slNo, data: "bulk", isDeleted: false },
+        { $set: syncData }
+      );
+
+      // 🔹 Sync to other related forms (register, job, matrimony, etc.)
+      await Data.updateMany(
+        {
+          slNo: updatedRecord.slNo,
+          _id: { $ne: updatedRecord._id },
+          data: { $ne: "bulk" },
+          isDeleted: false,
+        },
+        { $set: syncData }
+      );
+    }
+
     return res.status(200).json({
       success: true,
-      message: "Record updated successfully",
+      message: "Record updated successfully (and synced to linked records)",
       data: updatedRecord,
     });
   } catch (error: any) {
-    console.error("Error updating staff row:", error);
+    console.error("❌ Error updating staff row:", error);
     return res.status(500).json({
       success: false,
       message: error.message || "Error updating staff record",
