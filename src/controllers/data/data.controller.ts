@@ -2047,23 +2047,23 @@ export const approvePaymentStatus = async (req: Request, res: Response) => {
 
     await record.save();
 
-    if (record.assignedStaff) {
-      const staff = await Staff.findById(record.assignedStaff).select("name");
+    // if (record.assignedStaff) {
+    //   const staff = await Staff.findById(record.assignedStaff).select("name");
 
-      const message = `Admin ${status} ${field} for ${
-        record.name || "Unknown"
-      } (${record.profileId})`;
+    //   const message = `Admin ${status} ${field} for ${
+    //     record.name || "Unknown"
+    //   } (${record.profileId})`;
 
-      await Notification.create({
-        staffId: record.assignedStaff,
-        profileId: record.profileId,
-        name: record.name,
-        message,
-        type: "payment_approval",
-      });
+    //   await Notification.create({
+    //     staffId: record.assignedStaff,
+    //     profileId: record.profileId,
+    //     name: record.name,
+    //     message,
+    //     type: "payment_approval",
+    //   });
 
-      console.log("✅ Notification Created:", message);
-    }
+    //   console.log("✅ Notification Created:", message);
+    // }
 
     return res.status(200).json({
       success: true,
