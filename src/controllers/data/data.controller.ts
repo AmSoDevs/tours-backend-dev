@@ -1709,7 +1709,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       updateFields
     );
 
-    const changedPayments = [];
+    const changedPayments: string[] = [];
     if (
       updateFields.regPayment !== undefined &&
       updateFields.regPayment !== record.regPayment
@@ -1752,9 +1752,40 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         message: newNotification.message,
         createdAt: newNotification.createdAt,
       });
-    }
 
-    // ✅ Attempt safe update with duplicate handling
+      const approvalUpdates: any = { ...record.isPaymentApproved };
+
+      if (
+        updateFields.regPayment !== undefined &&
+        updateFields.regPayment !== record.regPayment
+      )
+        approvalUpdates.regPaymentApproved = "pending";
+
+      if (
+        updateFields.serPayment !== undefined &&
+        updateFields.serPayment !== record.serPayment
+      )
+        approvalUpdates.serPaymentApproved = "pending";
+
+      if (
+        updateFields.regReceived !== undefined &&
+        updateFields.regReceived !== record.regReceived
+      )
+        approvalUpdates.regReceivedApproved = "pending";
+
+      if (
+        updateFields.serReceived !== undefined &&
+        updateFields.serReceived !== record.serReceived
+      )
+        approvalUpdates.serReceivedApproved = "pending";
+
+      const isAnyAction = Object.values(approvalUpdates).some(
+        (val) => val && val !== "null"
+      );
+
+      updateFields.isPaymentApproved = approvalUpdates;
+      updateFields.isAdminPaymentApproved = isAnyAction;
+    }
     let updatedRecord;
     try {
       updatedRecord = await Data.findByIdAndUpdate(id, updateFields, {
@@ -1772,7 +1803,6 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       throw error;
     }
 
-    // ✅ STEP 2: Sync core user details across linked records
     if (updatedRecord) {
       const syncFields = [
         "name",
@@ -1950,6 +1980,101 @@ export const softDeleteData = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Internal server error while deleting data",
+      error: error.message,
+    });
+  }
+};
+
+export const approvePaymentStatus = async (req: Request, res: Response) => {
+  try {
+    const { profileId, field, status } = req.body;
+
+    if (!profileId || !field || !status) {
+      return res.status(400).json({
+        success: false,
+        message: "profileId, field, and status are required.",
+      });
+    }
+
+    if (
+      !["regPayment", "regReceived", "serPayment", "serReceived"].includes(
+        field
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid field. Must be one of regPayment, regReceived, serPayment, serReceived.",
+      });
+    }
+
+    if (!["approved", "rejected", "pending", "null"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid status. Must be 'approved', 'rejected', 'pending', or 'null'.",
+      });
+    }
+
+    // Find the record by profileId
+    const record = await Data.findOne({ profileId });
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: "Profile not found.",
+      });
+    }
+
+    // Update isPaymentApproved object
+    const approvalFieldMap: any = {
+      regPayment: "regPaymentApproved",
+      regReceived: "regReceivedApproved",
+      serPayment: "serPaymentApproved",
+      serReceived: "serReceivedApproved",
+    };
+
+    const approvalKey = approvalFieldMap[field];
+
+    record.isPaymentApproved = {
+      ...record.isPaymentApproved,
+      [approvalKey]: status,
+    };
+
+    // Auto-toggle main flag
+    record.isAdminPaymentApproved = Object.values(
+      record.isPaymentApproved || {}
+    ).some((val) => val && val !== "null");
+
+    await record.save();
+
+    if (record.assignedStaff) {
+      const staff = await Staff.findById(record.assignedStaff).select("name");
+
+      const message = `Admin ${status} ${field} for ${
+        record.name || "Unknown"
+      } (${record.profileId})`;
+
+      await Notification.create({
+        staffId: record.assignedStaff,
+        profileId: record.profileId,
+        name: record.name,
+        message,
+        type: "payment_approval",
+      });
+
+      console.log("✅ Notification Created:", message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Payment ${field} marked as ${status} successfully.`,
+      data: record,
+    });
+  } catch (error: any) {
+    console.error("Error approving payment:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while approving payment.",
       error: error.message,
     });
   }

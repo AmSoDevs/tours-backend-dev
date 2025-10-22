@@ -1,5 +1,12 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
+export interface PaymentApprovalStatus {
+  regPaymentApproved: "approved" | "rejected" | "pending" | "null";
+  regReceivedApproved: "approved" | "rejected" | "pending" | "null";
+  serPaymentApproved: "approved" | "rejected" | "pending" | "null";
+  serReceivedApproved: "approved" | "rejected" | "pending" | "null";
+}
+
 export interface DataDocument extends Document {
   _id: Types.ObjectId;
   slNo: string;
@@ -69,6 +76,8 @@ export interface DataDocument extends Document {
   profilePhoto?: string;
   whatsapp?: string;
   files?: Types.ObjectId[];
+  isAdminPaymentApproved: boolean;
+  isPaymentApproved: PaymentApprovalStatus;
 }
 
 const DataSchema = new Schema<DataDocument>(
@@ -148,11 +157,33 @@ const DataSchema = new Schema<DataDocument>(
     serDate: { type: String },
     profilePhoto: { type: String },
     files: [{ type: Schema.Types.ObjectId, ref: "Files" }],
+    isAdminPaymentApproved: { type: Boolean, default: false },
+    isPaymentApproved: {
+      regPaymentApproved: {
+        type: String,
+        enum: ["approved", "rejected", "pending", "null"],
+        default: "null",
+      },
+      regReceivedApproved: {
+        type: String,
+        enum: ["approved", "rejected", "pending", "null"],
+        default: "null",
+      },
+      serPaymentApproved: {
+        type: String,
+        enum: ["approved", "rejected", "pending", "null"],
+        default: "null",
+      },
+      serReceivedApproved: {
+        type: String,
+        enum: ["approved", "rejected", "pending", "null"],
+        default: "null",
+      },
+    },
   },
   { timestamps: true }
 );
 
-// ✅ Allow same mobile across different data categories (register, visa, etc.)
 // ✅ Allow same mobile across different form types (register, visa, etc.)
 DataSchema.index(
   { data: 1, mobile: 1 },
