@@ -12,9 +12,12 @@ export const getNotifications = async (req: Request, res: Response) => {
       .sort({ createdAt: -1 })
       .limit(50);
 
+    const count = notifications ? notifications?.length : 0;
+
     res.status(200).json({
       success: true,
-      data: notifications,
+      count: count,
+      notifications: notifications,
     });
   } catch (error: any) {
     res.status(500).json({

@@ -7,11 +7,12 @@ import { publicRouter } from "./public.routes";
 import { registrationRouter } from "./registration.routes";
 import { uploadRouter } from "./upload.routes";
 import cleanupRouter from "./cleanup.routes";
+import { notificationRouter } from "./notification.routes";
 
 export const apiRouter = Router();
 
 apiRouter.get("/", (_req, res) => {
-	res.json({ message: "CRM API v1" });
+  res.json({ message: "CRM API v1" });
 });
 
 apiRouter.use("/auth", authRouter);
@@ -22,3 +23,4 @@ apiRouter.use("/public", publicRouter);
 apiRouter.use("/registration", registrationRouter);
 apiRouter.use("/upload", uploadRouter);
 apiRouter.use("/cleanup", cleanupRouter);
+apiRouter.use("/notify", notificationRouter);
