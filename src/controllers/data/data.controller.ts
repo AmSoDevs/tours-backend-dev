@@ -12,6 +12,7 @@ import {
 } from "../../utils/helper";
 import { FormTracking } from "../../models/FormTracking";
 import { dataControllerHooks } from "./data.controller.hooks";
+import { Notification } from "../../models/Notification";
 
 export const importData = async (req: Request, res: Response) => {
   try {
@@ -1271,7 +1272,10 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
 
         if (record.mobile) {
           const selfRegistered = await Data.findOne({
-            $or: [{ mobile: record.mobile }, { refferenceNumber: record.mobile }],
+            $or: [
+              { mobile: record.mobile },
+              { refferenceNumber: record.mobile },
+            ],
             data: "register",
             isDeleted: false,
           });
@@ -1323,7 +1327,6 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 // Staff-specific update functions that verify data ownership
 export const updateStaffDataStatus = async (req: Request, res: Response) => {
@@ -1705,6 +1708,51 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       record,
       updateFields
     );
+
+    const changedPayments = [];
+    if (
+      updateFields.regPayment !== undefined &&
+      updateFields.regPayment !== record.regPayment
+    )
+      changedPayments.push("Registration Payment");
+    if (
+      updateFields.serPayment !== undefined &&
+      updateFields.serPayment !== record.serPayment
+    )
+      changedPayments.push("Service Payment");
+    if (
+      updateFields.regReceived !== undefined &&
+      updateFields.regReceived !== record.regReceived
+    )
+      changedPayments.push("Registration Received");
+    if (
+      updateFields.serReceived !== undefined &&
+      updateFields.serReceived !== record.serReceived
+    )
+      changedPayments.push("Service Received");
+
+    if (changedPayments.length > 0) {
+      const staff = await Staff.findById(staffId).select("name");
+      const message = `${
+        staff?.name || "A staff"
+      } updated ${changedPayments.join(", ")} for ${
+        record.name || "Unknown"
+      } (${record.profileId || record.slNo})`;
+
+      const newNotification = await Notification.create({
+        staffId,
+        profileId: record.profileId || record.slNo,
+        name: record.name,
+        message,
+        type: "payment_update",
+      });
+
+      console.log("✅ Notification Created:", {
+        id: newNotification._id,
+        message: newNotification.message,
+        createdAt: newNotification.createdAt,
+      });
+    }
 
     // ✅ Attempt safe update with duplicate handling
     let updatedRecord;
