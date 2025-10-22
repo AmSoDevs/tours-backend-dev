@@ -1,5 +1,12 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
+export interface PaymentApprovalStatus {
+  regPaymentApproved: "approved" | "rejected" | "pending" | "null";
+  regReceivedApproved: "approved" | "rejected" | "pending" | "null";
+  serPaymentApproved: "approved" | "rejected" | "pending" | "null";
+  serReceivedApproved: "approved" | "rejected" | "pending" | "null";
+}
+
 export interface DataDocument extends Document {
   _id: Types.ObjectId;
   slNo: string;
@@ -17,6 +24,7 @@ export interface DataDocument extends Document {
   remarkSecond: string;
   assignedStaff: Types.ObjectId;
   isDeleted: boolean;
+  isDuplicateAllowed: boolean;
   reminderDateAndTime?: Date;
   callClickTime?: Date;
   whatsappClickTime?: Date;
@@ -68,6 +76,8 @@ export interface DataDocument extends Document {
   profilePhoto?: string;
   whatsapp?: string;
   files?: Types.ObjectId[];
+  isAdminPaymentApproved: boolean;
+  isPaymentApproved: PaymentApprovalStatus;
 }
 
 const DataSchema = new Schema<DataDocument>(
@@ -91,6 +101,7 @@ const DataSchema = new Schema<DataDocument>(
       ref: "Staff",
       required: true,
     },
+    isDuplicateAllowed: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false, index: true },
     reminderDateAndTime: { type: Date },
     callClickTime: { type: Date },
@@ -146,14 +157,66 @@ const DataSchema = new Schema<DataDocument>(
     serDate: { type: String },
     profilePhoto: { type: String },
     files: [{ type: Schema.Types.ObjectId, ref: "Files" }],
+    isAdminPaymentApproved: { type: Boolean, default: false },
+    isPaymentApproved: {
+      regPaymentApproved: {
+        type: String,
+        enum: ["approved", "rejected", "pending", "null"],
+        default: "null",
+      },
+      regReceivedApproved: {
+        type: String,
+        enum: ["approved", "rejected", "pending", "null"],
+        default: "null",
+      },
+      serPaymentApproved: {
+        type: String,
+        enum: ["approved", "rejected", "pending", "null"],
+        default: "null",
+      },
+      serReceivedApproved: {
+        type: String,
+        enum: ["approved", "rejected", "pending", "null"],
+        default: "null",
+      },
+    },
   },
   { timestamps: true }
 );
 
-DataSchema.index({ data: 1, mobile: 1 }, { unique: true });
-DataSchema.index({ data: 1, slNo: 1 }, { unique: true });
-DataSchema.index({ data: 1, profileId: 1 }, { unique: true });
+// ✅ Allow same mobile across different form types (register, visa, etc.)
+DataSchema.index(
+  { data: 1, mobile: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      isDuplicateAllowed: false,
+      isDeleted: false, // ✅ don’t block with deleted records
+    },
+  }
+);
 
+DataSchema.index(
+  { data: 1, slNo: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      isDuplicateAllowed: false,
+      isDeleted: false,
+    },
+  }
+);
+
+DataSchema.index(
+  { data: 1, profileId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      isDuplicateAllowed: false,
+      isDeleted: false,
+    },
+  }
+);
 
 export const Data: Model<DataDocument> =
   mongoose.models.Data || mongoose.model<DataDocument>("Data", DataSchema);

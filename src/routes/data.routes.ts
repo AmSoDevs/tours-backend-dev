@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { importData, getData, updateDataStatus, updateCallClickTime, updateWhatsappClickTime, updateRemarks, submitForm, updateRow, getStaffAssignedData, updateStaffDataStatus, updateStaffCallClickTime, updateStaffWhatsappClickTime, updateStaffRemarks, updateStaffRow, resetStaffAssignment, getStaffAssignmentStatus, softDeleteData } from "../controllers/data/data.controller";
+import { importData, getData, updateDataStatus, updateCallClickTime, updateWhatsappClickTime, updateRemarks, submitForm, updateRow, getStaffAssignedData, updateStaffDataStatus, updateStaffCallClickTime, updateStaffWhatsappClickTime, updateStaffRemarks, updateStaffRow, resetStaffAssignment, getStaffAssignmentStatus, softDeleteData, approvePaymentStatus } from "../controllers/data/data.controller";
 import { authenticate, requireAdmin, requireStaff } from "../middleware/auth";
 
 export const dataRouter = Router();
@@ -33,4 +33,5 @@ dataRouter.post("/bulk-delete", softDeleteData);
 dataRouter.get("/staff-assignment/status", getStaffAssignmentStatus);
 dataRouter.post("/staff-assignment/reset", resetStaffAssignment);
 
+dataRouter.post("/approve-payment", approvePaymentStatus);
 
