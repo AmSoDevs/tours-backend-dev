@@ -1334,12 +1334,20 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     const endDate = String(req.query.endDate || "");
     const type = String(req.query.type || "all");
     const profileId = String(req.query.profileId || "");
+    const showRemindersOnly = String(req.query.showRemindersOnly || "false");
 
     // 🔹 Base query: only data assigned to this staff
     const query: any = {
       isDeleted: false,
       assignedStaff: staffId,
     };
+
+    // 🔹 Filter to show only records with active reminders
+    if (showRemindersOnly === "true") {
+      const now = new Date();
+      query.hasReminder = true;
+      query.reminderDateAndTime = { $gte: now };
+    }
 
     // 🔹 Filters
     if (dataType && dataType !== "all")
@@ -1392,6 +1400,10 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     sortObj[field] = sortOrder === "desc" ? -1 : 1;
 
     const skip = (page - 1) * (limit || 0);
+    // 🔹 If only showing reminders, sort by nearest reminder first
+    if (showRemindersOnly === "true") {
+      sortObj.reminderDateAndTime = 1;
+    }
 
     // ✅ Step 1: Fetch assigned data
     let data = await Data.find(query)
@@ -1596,8 +1608,13 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
 
     // 🧩 Prepare update object
     const updateData: any = { status };
+
     if (reminderDateAndTime) {
       updateData.reminderDateAndTime = new Date(reminderDateAndTime);
+      updateData.hasReminder = true;
+    } else {
+      updateData.reminderDateAndTime = null;
+      updateData.hasReminder = false;
     }
 
     // 🧩 Perform the update
