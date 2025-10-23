@@ -21,7 +21,7 @@ notificationRouter.patch(
   markAdminNotificationAsIgnored
 );
 
-//staff
+//stafff
 notificationRouter.get("/staff/reminders", getStaffReminders);
 notificationRouter.patch(
   "/staff/reminders/read/:reminderId",
