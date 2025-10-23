@@ -9,20 +9,25 @@ import {
 } from "../controllers/notification.controller";
 
 export const notificationRouter = Router();
+//admin
 
-notificationRouter.get("/", getNotifications);
-notificationRouter.patch("/read/:notificationId", markAdminNotificationAsRead);
+notificationRouter.get("/notifications", getNotifications);
 notificationRouter.patch(
-  "/ignore/:notificationId",
+  "/notifications/read/:notificationId",
+  markAdminNotificationAsRead
+);
+notificationRouter.patch(
+  "/notifications/ignore/:notificationId",
   markAdminNotificationAsIgnored
 );
 
-notificationRouter.get("/staff/:id/reminders", getStaffReminders);
+//staff
+notificationRouter.get("/staff/reminders", getStaffReminders);
 notificationRouter.patch(
-  "/staff/:id/reminders/:reminderId/read",
+  "/staff/reminders/read/:reminderId",
   markReminderAsRead
 );
 notificationRouter.patch(
-  "/staff/:id/reminders/:reminderId/ignore",
+  "/staff/reminders/ignore/:reminderId",
   markStaffReminderAsIgnored
 );
