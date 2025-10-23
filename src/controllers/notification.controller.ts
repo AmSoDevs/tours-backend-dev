@@ -2,11 +2,14 @@ import { Request, Response } from "express";
 import { Notification } from "../models/Notification";
 import { ReminderNotification } from "../models/ReminderNotificationModel";
 
-
 export const getNotifications = async (req: Request, res: Response) => {
   try {
     const { since } = req.query;
-    const query: any = {};
+
+    const query: any = {
+      isRead: false,
+      isIgnoredAdmin: false,
+    };
 
     if (since) query.createdAt = { $gt: new Date(since as string) };
 
@@ -28,7 +31,6 @@ export const getNotifications = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 export const markAdminNotificationAsRead = async (
   req: Request,
@@ -63,7 +65,6 @@ export const markAdminNotificationAsRead = async (
   }
 };
 
-
 export const getStaffReminders = async (req: Request, res: Response) => {
   try {
     const { id: staffId } = req.params;
@@ -71,6 +72,7 @@ export const getStaffReminders = async (req: Request, res: Response) => {
     const reminders = await ReminderNotification.find({
       staffId,
       isRead: false,
+      isIgnoredStaff: false,
     })
       .sort({ reminderDateAndTime: 1 })
       .limit(50);
@@ -81,7 +83,7 @@ export const getStaffReminders = async (req: Request, res: Response) => {
       reminders,
     });
   } catch (error: any) {
-    console.error(" Error fetching reminders:", error);
+    console.error("Error fetching reminders:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error while fetching reminders",
@@ -89,7 +91,6 @@ export const getStaffReminders = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 export const markReminderAsRead = async (req: Request, res: Response) => {
   try {
@@ -120,6 +121,76 @@ export const markReminderAsRead = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Internal server error while marking reminder as read",
+      error: error.message,
+    });
+  }
+};
+
+export const markAdminNotificationAsIgnored = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { notificationId } = req.params;
+
+    const notification = await Notification.findById(notificationId);
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found.",
+      });
+    }
+
+    notification.isIgnoredAdmin = true;
+    await notification.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Notification marked as ignored successfully.",
+      notification,
+    });
+  } catch (error: any) {
+    console.error("Error marking admin notification as ignored:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while marking notification as ignored",
+      error: error.message,
+    });
+  }
+};
+
+export const markStaffReminderAsIgnored = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { id: staffId, reminderId } = req.params;
+
+    const reminder = await ReminderNotification.findOne({
+      _id: reminderId,
+      staffId,
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: "Reminder not found or not assigned to this staff.",
+      });
+    }
+
+    reminder.isIgnoredStaff = true;
+    await reminder.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Reminder marked as ignored successfully.",
+      reminder,
+    });
+  } catch (error: any) {
+    console.error("Error marking reminder as ignored:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while marking reminder as ignored",
       error: error.message,
     });
   }

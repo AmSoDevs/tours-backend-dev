@@ -9,6 +9,7 @@ export interface ReminderNotificationDocument extends Document {
   message: string;
   reminderDateAndTime: Date;
   isRead: boolean;
+  isIgnoredStaff: boolean;
   notified: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -24,6 +25,7 @@ const ReminderNotificationSchema = new Schema<ReminderNotificationDocument>(
     message: { type: String, required: true },
     reminderDateAndTime: { type: Date, required: true },
     isRead: { type: Boolean, default: false },
+    isIgnoredStaff: { type: Boolean, default: false }, 
     notified: { type: Boolean, default: false },
   },
   { timestamps: true }
