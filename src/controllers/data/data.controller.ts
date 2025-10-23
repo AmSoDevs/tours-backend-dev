@@ -145,6 +145,7 @@ export const getData = async (req: Request, res: Response) => {
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     const dataType = String(req.query.dataType || "");
     const staffId = String(req.query.staffId || "");
+    const profileId = String(req.query.profileId || "");
     const status = String(req.query.status || "");
     const dataFilter = String(req.query.data || "");
     const search = String(req.query.search || "");
@@ -169,6 +170,11 @@ export const getData = async (req: Request, res: Response) => {
     }
 
     if (staffId && staffId !== "all") query.assignedStaff = staffId;
+
+    if (profileId && profileId.trim() !== "") {
+      query.profileId = { $regex: profileId.trim(), $options: "i" };
+    }
+
     if (status && status !== "all")
       query.status = { $regex: status, $options: "i" };
     if (dataFilter && dataFilter !== "all")
@@ -1234,7 +1240,7 @@ export const updateRow = async (req: Request, res: Response) => {
     // ✅ Sync only to bulk record, not all related
     if (updatedRecord) {
       const syncFields = [
-         "name",
+        "name",
         "mobile",
         "altMobNumber",
         "whatsapp",
