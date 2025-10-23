@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
 import { Notification } from "../models/Notification";
+import { ReminderNotification } from "../models/ReminderNotificationModel";
+
 
 export const getNotifications = async (req: Request, res: Response) => {
   try {
-    const { since } = req.query; // optional timestamp for polling
+    const { since } = req.query;
     const query: any = {};
 
     if (since) query.createdAt = { $gt: new Date(since as string) };
@@ -12,17 +14,112 @@ export const getNotifications = async (req: Request, res: Response) => {
       .sort({ createdAt: -1 })
       .limit(50);
 
-    const count = notifications ? notifications?.length : 0;
-
     res.status(200).json({
       success: true,
-      count: count,
-      notifications: notifications,
+      count: notifications.length,
+      notifications,
     });
   } catch (error: any) {
+    console.error("Error fetching notifications:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching notifications",
+      error: error.message,
+    });
+  }
+};
+
+
+export const markAdminNotificationAsRead = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { notificationId } = req.params;
+
+    const notification = await Notification.findById(notificationId);
+    if (!notification) {
+      return res.status(404).json({
+        success: false,
+        message: "Notification not found.",
+      });
+    }
+
+    notification.isRead = true;
+    await notification.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Notification marked as read successfully.",
+      notification,
+    });
+  } catch (error: any) {
+    console.error("Error marking admin notification as read:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while marking notification as read",
+      error: error.message,
+    });
+  }
+};
+
+
+export const getStaffReminders = async (req: Request, res: Response) => {
+  try {
+    const { id: staffId } = req.params;
+
+    const reminders = await ReminderNotification.find({
+      staffId,
+      isRead: false,
+    })
+      .sort({ reminderDateAndTime: 1 })
+      .limit(50);
+
+    res.status(200).json({
+      success: true,
+      count: reminders.length,
+      reminders,
+    });
+  } catch (error: any) {
+    console.error(" Error fetching reminders:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while fetching reminders",
+      error: error.message,
+    });
+  }
+};
+
+
+export const markReminderAsRead = async (req: Request, res: Response) => {
+  try {
+    const { id: staffId, reminderId } = req.params;
+
+    const reminder = await ReminderNotification.findOne({
+      _id: reminderId,
+      staffId,
+    });
+
+    if (!reminder) {
+      return res.status(404).json({
+        success: false,
+        message: "Reminder not found or not assigned to this staff.",
+      });
+    }
+
+    reminder.isRead = true;
+    await reminder.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Reminder marked as read successfully.",
+      reminder,
+    });
+  } catch (error: any) {
+    console.error(" Error marking reminder as read:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while marking reminder as read",
       error: error.message,
     });
   }

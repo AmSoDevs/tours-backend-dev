@@ -1,6 +1,17 @@
 import { Router } from "express";
-import { getNotifications } from "../controllers/notification.controller";
+import {
+  getNotifications,
+  getStaffReminders,
+  markAdminNotificationAsRead,
+  markReminderAsRead,
+} from "../controllers/notification.controller";
 
 export const notificationRouter = Router();
 
-notificationRouter.get("/notifications", getNotifications);
+notificationRouter.get("/", getNotifications);
+notificationRouter.patch("/read/:notificationId", markAdminNotificationAsRead);
+notificationRouter.get("/staff/:id/reminders", getStaffReminders);
+notificationRouter.patch(
+  "/staff/:id/reminders/:reminderId/read",
+  markReminderAsRead
+);

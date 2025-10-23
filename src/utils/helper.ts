@@ -1,6 +1,7 @@
 import { Counter } from "../models/Counter";
 import { Data } from "../models/Data";
 import { FormTracking } from "../models/FormTracking";
+import { ReminderNotification } from "../models/ReminderNotificationModel";
 import { Staff } from "../models/Staff";
 import { StaffAssignment } from "../models/StaffAssignment";
 
@@ -465,4 +466,28 @@ export const checkDuplicateNumbers = async (
 
   const duplicate = await Data.findOne(query);
   return duplicate;
+};
+
+export const startReminderScheduler = () => {
+  setInterval(async () => {
+    const now = new Date();
+    const inFiveMinutes = new Date(now.getTime() + 5 * 60 * 1000);
+
+    const upcomingReminders = await ReminderNotification.find({
+      reminderDateAndTime: { $lte: inFiveMinutes, $gte: now },
+      notified: false,
+    }).populate("staffId");
+
+    for (const reminder of upcomingReminders) {
+      const staff = reminder.staffId as any;
+      if (!staff) continue;
+
+      reminder.notified = true;
+      await reminder.save();
+
+      console.log(
+        `🔔 Reminder for ${staff.name}: Follow-up with ${reminder.name} (${reminder.phone}) in 5 minutes.`
+      );
+    }
+  }, 60 * 1000);
 };

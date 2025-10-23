@@ -13,6 +13,7 @@ import {
 import { FormTracking } from "../../models/FormTracking";
 import { dataControllerHooks } from "./data.controller.hooks";
 import { Notification } from "../../models/Notification";
+import { ReminderNotification } from "../../models/ReminderNotificationModel";
 
 export const importData = async (req: Request, res: Response) => {
   try {
@@ -462,6 +463,7 @@ export const updateDataStatus = async (req: Request, res: Response) => {
       message: `Successfully updated  record(s)`,
       updatedCount: 0,
     });
+
   } catch (error: any) {
     console.error("Error updating data status:", error);
     return res.status(500).json({
@@ -1560,6 +1562,7 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
     const { id: staffId } = req.params;
     const { ids, status, reminderDateAndTime } = req.body;
 
+    // 🧩 Validate input
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
         success: false,
@@ -1574,7 +1577,7 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    // Verify that all records belong to the staff member
+    // 🧩 Verify ownership - ensure all records belong to this staff
     const records = await Data.find({
       _id: { $in: ids },
       assignedStaff: staffId,
@@ -1588,26 +1591,20 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    // Prepare update object
-    const updateData: any = {
-      status: status,
-    };
-
-    // Add reminderDateAndTime if provided
+    // 🧩 Prepare update object
+    const updateData: any = { status };
     if (reminderDateAndTime) {
       updateData.reminderDateAndTime = new Date(reminderDateAndTime);
     }
 
-    // Update only the verified records
+    // 🧩 Perform the update
     const updateResult = await Data.updateMany(
       {
         _id: { $in: ids },
         assignedStaff: staffId,
         isDeleted: false,
       },
-      {
-        $set: updateData,
-      }
+      { $set: updateData }
     );
 
     if (updateResult.modifiedCount === 0) {
@@ -1617,13 +1614,51 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       });
     }
 
+    // 🧩 Handle Reminder Scheduling (if reminderDateAndTime provided)
+    if (reminderDateAndTime) {
+      for (const record of records) {
+        try {
+          await ReminderNotification.findOneAndUpdate(
+            {
+              staffId,
+              profileId: record.profileId || record.slNo,
+            },
+            {
+              staffId,
+              profileId: record.profileId || record.slNo,
+              name: record.name,
+              phone: record.mobile,
+              remarks: record.remarkFirst || record.remarkSecond || "",
+              message: `⏰ Reminder: Follow-up with ${
+                record.name || "Client"
+              } (${record.mobile}) scheduled.`,
+              reminderDateAndTime: new Date(reminderDateAndTime),
+              notified: false,
+              isRead: false,
+            },
+            { upsert: true, new: true }
+          );
+        } catch (err) {
+          console.error(
+            `❌ Failed to create reminder for record ${record._id}:`,
+            err
+          );
+        }
+      }
+
+      console.log(`✅ ${records.length} reminder(s) scheduled for staff ${staffId}`);
+    }
+
+    // ✅ Response
     return res.status(200).json({
       success: true,
-      message: `Successfully updated ${updateResult.modifiedCount} record(s)`,
+      message: `Successfully updated ${updateResult.modifiedCount} record(s)${
+        reminderDateAndTime ? " and scheduled reminders" : ""
+      }.`,
       updatedCount: updateResult.modifiedCount,
     });
   } catch (error: any) {
-    console.error("Error updating staff data status:", error);
+    console.error("❌ Error updating staff data status:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error while updating status",
