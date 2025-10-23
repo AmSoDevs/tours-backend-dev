@@ -463,7 +463,6 @@ export const updateDataStatus = async (req: Request, res: Response) => {
       message: `Successfully updated  record(s)`,
       updatedCount: 0,
     });
-
   } catch (error: any) {
     console.error("Error updating data status:", error);
     return res.status(500).json({
@@ -1334,6 +1333,7 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     const startDate = String(req.query.startDate || "");
     const endDate = String(req.query.endDate || "");
     const type = String(req.query.type || "all");
+    const profileId = String(req.query.profileId || "");
 
     // 🔹 Base query: only data assigned to this staff
     const query: any = {
@@ -1348,6 +1348,9 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       query.status = { $regex: status, $options: "i" };
     if (dataFilter && dataFilter !== "all")
       query.data = { $regex: dataFilter, $options: "i" };
+    if (profileId && profileId.trim() !== "") {
+      query.profileId = { $regex: profileId.trim(), $options: "i" };
+    }
 
     // 🔹 Date filter
     const isValidDate = (d: string): boolean =>
@@ -1646,7 +1649,9 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
         }
       }
 
-      console.log(`✅ ${records.length} reminder(s) scheduled for staff ${staffId}`);
+      console.log(
+        `✅ ${records.length} reminder(s) scheduled for staff ${staffId}`
+      );
     }
 
     // ✅ Response
