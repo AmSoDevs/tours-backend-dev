@@ -99,7 +99,8 @@ export const getStaffReminders = async (req: Request, res: Response) => {
 
 export const markReminderAsRead = async (req: Request, res: Response) => {
   try {
-    const { staffId, reminderId } = req.params;
+    const staffId = String(req.query.staffId || "");
+    const { reminderId } = req.params;
 
     const reminder = await ReminderNotification.findOne({
       _id: reminderId,
@@ -169,7 +170,9 @@ export const markStaffReminderAsIgnored = async (
   res: Response
 ) => {
   try {
-    const { staffId, reminderId } = req.params;
+    const staffId = String(req.query.staffId || "");
+
+    const { reminderId } = req.params;
 
     const reminder = await ReminderNotification.findOne({
       _id: reminderId,
