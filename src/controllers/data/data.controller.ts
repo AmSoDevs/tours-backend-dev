@@ -13,6 +13,7 @@ import {
 import { FormTracking } from "../../models/FormTracking";
 import { dataControllerHooks } from "./data.controller.hooks";
 import { Notification } from "../../models/Notification";
+import { ReminderNotification } from "../../models/ReminderNotificationModel";
 
 export const importData = async (req: Request, res: Response) => {
   try {
@@ -145,6 +146,7 @@ export const getData = async (req: Request, res: Response) => {
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
     const dataType = String(req.query.dataType || "");
     const staffId = String(req.query.staffId || "");
+    const profileId = String(req.query.profileId || "");
     const status = String(req.query.status || "");
     const dataFilter = String(req.query.data || "");
     const search = String(req.query.search || "");
@@ -157,6 +159,7 @@ export const getData = async (req: Request, res: Response) => {
     const type = String(req.query.type || "all");
     const startDate = req.query.startDate ? String(req.query.startDate) : "";
     const endDate = req.query.endDate ? String(req.query.endDate) : "";
+    const approvalStatus = String(req.query.approvalStatus || "null");
 
     const query: any = {};
     query.isDeleted = showDeletedOnly === "true";
@@ -169,6 +172,11 @@ export const getData = async (req: Request, res: Response) => {
     }
 
     if (staffId && staffId !== "all") query.assignedStaff = staffId;
+
+    if (profileId && profileId.trim() !== "") {
+      query.profileId = { $regex: profileId.trim(), $options: "i" };
+    }
+
     if (status && status !== "all")
       query.status = { $regex: status, $options: "i" };
     if (dataFilter && dataFilter !== "all")
@@ -196,6 +204,31 @@ export const getData = async (req: Request, res: Response) => {
       query.createdAt = dateFilter;
     }
 
+    if (approvalStatus !== "null") {
+      const approvalFields = [
+        "isPaymentApproved.regPaymentApproved",
+        "isPaymentApproved.regReceivedApproved",
+        "isPaymentApproved.serPaymentApproved",
+        "isPaymentApproved.serReceivedApproved",
+      ];
+
+      if (approvalStatus === "rejected") {
+        query.$or = approvalFields.map((f) => ({ [f]: "rejected" }));
+      } else if (approvalStatus === "pending") {
+        query.$and = [
+          { $nor: approvalFields.map((f) => ({ [f]: "rejected" })) },
+          { $or: approvalFields.map((f) => ({ [f]: "pending" })) },
+        ];
+      } else if (approvalStatus === "approved") {
+        query.$and = [
+          { $nor: approvalFields.map((f) => ({ [f]: "rejected" })) },
+          { $nor: approvalFields.map((f) => ({ [f]: "pending" })) },
+          { $or: approvalFields.map((f) => ({ [f]: "approved" })) },
+        ];
+      }
+    }
+
+    // ✅ Sort handling
     const sortObj: any = {};
     const sortFieldMap: any = {
       createdAt: "createdAt",
@@ -211,7 +244,7 @@ export const getData = async (req: Request, res: Response) => {
 
     const skip = (page - 1) * (limit || 0);
 
-    // ✅ Fetch all main data (bulk + normal)
+    // ✅ Fetch all data
     let data = await Data.find(query)
       .populate("assignedStaff", "name staffId")
       .populate("files")
@@ -221,7 +254,7 @@ export const getData = async (req: Request, res: Response) => {
 
     const total = await Data.countDocuments(query);
 
-    // ✅ STEP 1: Find bulk records
+    // ✅ STEP 1: Handle bulk records filtering
     const bulkRecords = data.filter((r) => r.data?.toLowerCase() === "bulk");
 
     if (bulkRecords.length > 0) {
@@ -236,13 +269,12 @@ export const getData = async (req: Request, res: Response) => {
 
       const linkedIds = linkedRecords.map((r) => r._id);
 
-      // ✅ STEP 3: Check which of these linked forms are fully completed in FormTracking
+      // ✅ STEP 3: Find completed tracking forms
       const completedTrackings = await FormTracking.find({
         dataId: { $in: linkedIds },
         status: { $regex: /^submitted$/i },
       }).select("dataId");
 
-      // ✅ Safely extract IDs (TypeScript safe)
       const completedIds = new Set(
         completedTrackings
           .filter((f) => !!f.dataId)
@@ -264,7 +296,98 @@ export const getData = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Pagination
+    // ✅ STEP 6: Compute derived flags & extra categories
+    const mobiles = data
+      .map((r) => [r.mobile, r.refferenceNumber])
+      .flat()
+      .filter(Boolean);
+
+    const relatedRecords = await Data.find({
+      $or: [
+        { mobile: { $in: mobiles } },
+        { refferenceNumber: { $in: mobiles } },
+      ],
+      isDeleted: false,
+    }).select("mobile refferenceNumber data");
+
+    const updatedData = await Promise.all(
+      data.map(async (record: any) => {
+        const dataType = record.data?.toLowerCase() || "";
+        const isBulk = dataType === "bulk";
+        const isRegister = dataType === "register";
+
+        const recordMobile = record.mobile?.trim() || "";
+        const recordRef = record.refferenceNumber?.trim() || "";
+
+        const related = relatedRecords.filter(
+          (r) =>
+            r.mobile === recordMobile ||
+            r.refferenceNumber === recordMobile ||
+            r.mobile === recordRef ||
+            r.refferenceNumber === recordRef
+        );
+
+        const extraCategories = [
+          ...new Set(
+            related
+              .map((r) => r.data)
+              .filter(
+                (d) => d && d.toLowerCase() !== record.data?.toLowerCase()
+              )
+          ),
+        ];
+
+        let isReferenceRegistered = false;
+        let isBulkRegistered = false;
+
+        if (record.refferenceNumber) {
+          const registeredRef = await Data.findOne({
+            $or: [
+              { mobile: record.refferenceNumber },
+              { refferenceNumber: record.refferenceNumber },
+            ],
+            data: "register",
+            isDeleted: false,
+          });
+          if (registeredRef) isReferenceRegistered = true;
+        }
+
+        if (record.mobile) {
+          const selfRegistered = await Data.findOne({
+            $or: [
+              { mobile: record.mobile },
+              { refferenceNumber: record.mobile },
+            ],
+            data: "register",
+            isDeleted: false,
+          });
+          if (selfRegistered) isBulkRegistered = true;
+        }
+
+        return {
+          ...record.toObject(),
+          isBulk,
+          isRegister,
+          isReferenceRegistered,
+          isBulkRegistered,
+          extraCategories,
+        };
+      })
+    );
+
+    // ✅ STEP 7: Type filter (new/old)
+    let filteredData = updatedData;
+    if (type === "old") {
+      filteredData = updatedData.filter(
+        (r) => r.isBulk && r.isReferenceRegistered && !r.isBulkRegistered
+      );
+    } else if (type === "new") {
+      filteredData = updatedData.filter(
+        (r) => r.isBulk && !r.isReferenceRegistered && !r.isBulkRegistered
+      );
+    }
+
+    // ✅ STEP 8: Pagination
     const pagination = {
       currentPage: page,
       totalPages: limit ? Math.ceil(total / limit) : 1,
@@ -272,10 +395,10 @@ export const getData = async (req: Request, res: Response) => {
       limit: limit || total,
     };
 
-    // ✅ Return response
+    // ✅ STEP 9: Return response
     return res.status(200).json({
       success: true,
-      data,
+      data: filteredData,
       pagination,
     });
   } catch (error: any) {
@@ -641,11 +764,10 @@ export const submitForm = async (req: Request, res: Response) => {
       assignedStaff = assignedStaffId;
     }
 
-    // ✅ Step 4: Create new record
     const newData = new Data({
       slNo,
       profileId,
-      data: form.formType, // e.g. register / matrimony / house
+      data: form.formType,
       dataType: "self",
       name,
       mobile,
@@ -691,6 +813,63 @@ export const submitForm = async (req: Request, res: Response) => {
     form.status = "in_progress";
     form.currentStep = 1;
 
+    // ✅ Step 7: Auto-create a linked "register" record when creating any non-register form
+    if (form.formType.toLowerCase() !== "register") {
+      const existingRegister = await Data.findOne({
+        $or: [{ mobile }, { refferenceNumber: mobile }],
+        data: "register",
+        isDeleted: false,
+      });
+
+      if (!existingRegister) {
+        console.log(`🪄 Auto-creating Register for ${name} (${mobile})`);
+
+        // 1️⃣ Copy all fields except internal/meta ones
+        const newDataObject = newData.toObject();
+        const fieldsToExclude = [
+          "_id",
+          "__v",
+          "createdAt",
+          "updatedAt",
+          "profileId",
+          "data",
+          "isDeleted",
+          "status",
+        ];
+
+        const registerCopy: Record<string, any> = {};
+        for (const [key, value] of Object.entries(newDataObject)) {
+          if (!fieldsToExclude.includes(key)) registerCopy[key] = value;
+        }
+
+        // 2️⃣ Generate new unique profile ID for Register with prefix "R"
+        const registerProfileId =
+          await dataControllerHooks.createRegistrationUniqueSerialNumber(
+            "register"
+          );
+
+        // 3️⃣ Set required register fields
+        registerCopy.data = "register";
+        registerCopy.dataType = "self";
+        registerCopy.slNo = newData.slNo; // same SL number links them
+        registerCopy.profileId = registerProfileId;
+        registerCopy.assignedStaff = newData.assignedStaff;
+        registerCopy.isDeleted = false;
+        registerCopy.status = "Pending";
+        registerCopy.refferenceNumber = newData.mobile; // Link original form's mobile as reference
+
+        // 4️⃣ Create and save new Register record
+        const registerData = new Data(registerCopy);
+        await registerData.save();
+
+        console.log(`✅ Register created successfully for ${name} (${mobile})`);
+      } else {
+        console.log(
+          `ℹ Register already exists for ${name} (${mobile}), skipping creation.`
+        );
+      }
+    }
+
     if (!isMultipleAllowed) {
       form.dataId = newData._id;
       if (!form.staffId) form.staffId = assignedStaff;
@@ -698,7 +877,6 @@ export const submitForm = async (req: Request, res: Response) => {
 
     await form.save();
 
-    // ✅ Step 6: Mirror key info back to bulk record (for auto-fill UI)
     if (existingBulk) {
       const mirrorFields = {
         name,
@@ -955,6 +1133,69 @@ export const updateForm = async (req: Request, res: Response) => {
     if (step === 3) form.status = "submitted";
     if (!allowMultiple) await form.save();
 
+    // ✅ Universal Auto-Sync across all linked forms (Register, Matrimony, Job, Visa, etc.)
+    if (updatedRecord && updatedRecord.slNo) {
+      const recordObj = updatedRecord.toObject();
+
+      // fields to sync between all forms
+      const syncFields = [
+        "name",
+        "mobile",
+        "whatsapp",
+        "altMobNumber",
+        "gender",
+        "religion",
+        "caste",
+        "education",
+        "district",
+        "city",
+        "job",
+        "maritalStatus",
+        "expectations",
+        "jobType",
+        "monthlyIncome",
+        "preferCountry",
+        "preferJobs",
+        "visaType",
+        "searchedHouses",
+        "prefferedPlace",
+        "prefferedSalary",
+        "priceRange",
+        "spokenLanguage",
+        "lookingFor",
+        "typeOfJathakam",
+        "star",
+        "prefferedCourse",
+        "houseType",
+        "dateOfBirth",
+        "contactPersonName",
+        "createProfileFor",
+        "passportNo",
+        "aadharId",
+      ];
+
+      const syncData: Record<string, any> = {};
+      for (const field of syncFields) {
+        if (recordObj[field as keyof typeof recordObj] !== undefined) {
+          syncData[field] = recordObj[field as keyof typeof recordObj];
+        }
+      }
+
+      // 🔹 Update all other records sharing same slNo (excluding current one)
+      const syncResult = await Data.updateMany(
+        {
+          slNo: updatedRecord.slNo,
+          _id: { $ne: updatedRecord._id },
+          isDeleted: false,
+        },
+        { $set: syncData }
+      );
+
+      console.log(
+        `🔄 Synced ${syncResult.modifiedCount} linked record(s) for ${updatedRecord.name} (${updatedRecord.mobile})`
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message: "Form updated successfully",
@@ -1027,8 +1268,8 @@ export const updateRow = async (req: Request, res: Response) => {
       const syncFields = [
         "name",
         "mobile",
-        "whatsapp",
         "altMobNumber",
+        "whatsapp",
         "gender",
         "religion",
         "caste",
@@ -1041,11 +1282,22 @@ export const updateRow = async (req: Request, res: Response) => {
         "monthlyIncome",
         "preferCountry",
         "preferJobs",
+        "spokenLanguage",
         "visaType",
         "searchedHouses",
         "prefferedPlace",
         "prefferedSalary",
         "priceRange",
+        "houseType",
+        "prefferedCourse",
+        "lookingFor",
+        "typeOfJathakam",
+        "star",
+        "dateOfBirth",
+        "contactPersonName",
+        "createProfileFor",
+        "passportNo",
+        "aadharId",
       ];
 
       const recordObj = updatedRecord.toObject();
@@ -1106,12 +1358,22 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     const startDate = String(req.query.startDate || "");
     const endDate = String(req.query.endDate || "");
     const type = String(req.query.type || "all");
+    const profileId = String(req.query.profileId || "");
+    const showRemindersOnly = String(req.query.showRemindersOnly || "false");
+    const approvalStatus = String(req.query.approvalStatus || "null");
 
     // 🔹 Base query: only data assigned to this staff
     const query: any = {
       isDeleted: false,
       assignedStaff: staffId,
     };
+
+    // 🔹 Filter to show only records with active reminders
+    // 🔹 Filter to show only records with reminders (past or future)
+    if (showRemindersOnly === "true") {
+      query.hasReminder = true;
+      query.reminderDateAndTime = { $ne: null };
+    }
 
     // 🔹 Filters
     if (dataType && dataType !== "all")
@@ -1120,6 +1382,9 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       query.status = { $regex: status, $options: "i" };
     if (dataFilter && dataFilter !== "all")
       query.data = { $regex: dataFilter, $options: "i" };
+    if (profileId && profileId.trim() !== "") {
+      query.profileId = { $regex: profileId.trim(), $options: "i" };
+    }
 
     // 🔹 Date filter
     const isValidDate = (d: string): boolean =>
@@ -1146,21 +1411,52 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       ];
     }
 
-    // 🔹 Sort
+    if (approvalStatus !== "null") {
+      const approvalFields = [
+        "isPaymentApproved.regPaymentApproved",
+        "isPaymentApproved.regReceivedApproved",
+        "isPaymentApproved.serPaymentApproved",
+        "isPaymentApproved.serReceivedApproved",
+      ];
+
+      if (approvalStatus === "rejected") {
+        query.$or = approvalFields.map((f) => ({ [f]: "rejected" }));
+      } else if (approvalStatus === "pending") {
+        query.$and = [
+          { $nor: approvalFields.map((f) => ({ [f]: "rejected" })) },
+          { $or: approvalFields.map((f) => ({ [f]: "pending" })) },
+        ];
+      } else if (approvalStatus === "approved") {
+        query.$and = [
+          { $nor: approvalFields.map((f) => ({ [f]: "rejected" })) },
+          { $nor: approvalFields.map((f) => ({ [f]: "pending" })) },
+          { $or: approvalFields.map((f) => ({ [f]: "approved" })) },
+        ];
+      }
+    }
+
     const sortObj: any = {};
-    const sortFieldMap: any = {
-      createdAt: "createdAt",
-      updatedAt: "updatedAt",
-      name: "name",
-      mobile: "mobile",
-      status: "status",
-      slNo: "slNo",
-      "assignedStaff.staffId": "assignedStaff.staffId",
-    };
-    const field = sortFieldMap[sortBy] || "createdAt";
-    sortObj[field] = sortOrder === "desc" ? -1 : 1;
+    if (showRemindersOnly === "true") {
+      sortObj.reminderDateAndTime = 1;
+    } else {
+      const sortFieldMap: any = {
+        createdAt: "createdAt",
+        updatedAt: "updatedAt",
+        name: "name",
+        mobile: "mobile",
+        status: "status",
+        slNo: "slNo",
+        "assignedStaff.staffId": "assignedStaff.staffId",
+      };
+      const field = sortFieldMap[sortBy] || "createdAt";
+      sortObj[field] = sortOrder === "desc" ? -1 : 1;
+    }
 
     const skip = (page - 1) * (limit || 0);
+    // 🔹 If only showing reminders, sort by nearest reminder first
+    if (showRemindersOnly === "true") {
+      sortObj.reminderDateAndTime = 1;
+    }
 
     // ✅ Step 1: Fetch assigned data
     let data = await Data.find(query)
@@ -1334,6 +1630,7 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
     const { id: staffId } = req.params;
     const { ids, status, reminderDateAndTime } = req.body;
 
+    // 🧩 Validate input
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
         success: false,
@@ -1348,7 +1645,7 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    // Verify that all records belong to the staff member
+    // 🧩 Verify ownership - ensure all records belong to this staff
     const records = await Data.find({
       _id: { $in: ids },
       assignedStaff: staffId,
@@ -1362,26 +1659,25 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    // Prepare update object
-    const updateData: any = {
-      status: status,
-    };
+    // 🧩 Prepare update object
+    const updateData: any = { status };
 
-    // Add reminderDateAndTime if provided
     if (reminderDateAndTime) {
       updateData.reminderDateAndTime = new Date(reminderDateAndTime);
+      updateData.hasReminder = true;
+    } else {
+      updateData.reminderDateAndTime = null;
+      updateData.hasReminder = false;
     }
 
-    // Update only the verified records
+    // 🧩 Perform the update
     const updateResult = await Data.updateMany(
       {
         _id: { $in: ids },
         assignedStaff: staffId,
         isDeleted: false,
       },
-      {
-        $set: updateData,
-      }
+      { $set: updateData }
     );
 
     if (updateResult.modifiedCount === 0) {
@@ -1391,13 +1687,53 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       });
     }
 
+    // 🧩 Handle Reminder Scheduling (if reminderDateAndTime provided)
+    if (reminderDateAndTime) {
+      for (const record of records) {
+        try {
+          await ReminderNotification.findOneAndUpdate(
+            {
+              staffId,
+              profileId: record.profileId || record.slNo,
+            },
+            {
+              staffId,
+              profileId: record.profileId || record.slNo,
+              name: record.name,
+              phone: record.mobile,
+              remarks: record.remarkFirst || record.remarkSecond || "",
+              message: `⏰ Reminder: Follow-up with ${
+                record.name || "Client"
+              } (${record.mobile}) scheduled.`,
+              reminderDateAndTime: new Date(reminderDateAndTime),
+              notified: false,
+              isRead: false,
+            },
+            { upsert: true, new: true }
+          );
+        } catch (err) {
+          console.error(
+            `❌ Failed to create reminder for record ${record._id}:`,
+            err
+          );
+        }
+      }
+
+      console.log(
+        `✅ ${records.length} reminder(s) scheduled for staff ${staffId}`
+      );
+    }
+
+    // ✅ Response
     return res.status(200).json({
       success: true,
-      message: `Successfully updated ${updateResult.modifiedCount} record(s)`,
+      message: `Successfully updated ${updateResult.modifiedCount} record(s)${
+        reminderDateAndTime ? " and scheduled reminders" : ""
+      }.`,
       updatedCount: updateResult.modifiedCount,
     });
   } catch (error: any) {
-    console.error("Error updating staff data status:", error);
+    console.error("❌ Error updating staff data status:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error while updating status",
@@ -1747,7 +2083,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         type: "payment_update",
       });
 
-      console.log("✅ Notification Created:", {
+      console.log("Notification Created:", {
         id: newNotification._id,
         message: newNotification.message,
         createdAt: newNotification.createdAt,
@@ -1807,8 +2143,8 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       const syncFields = [
         "name",
         "mobile",
-        "whatsapp",
         "altMobNumber",
+        "whatsapp",
         "gender",
         "religion",
         "caste",
@@ -1821,11 +2157,22 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         "monthlyIncome",
         "preferCountry",
         "preferJobs",
+        "spokenLanguage",
         "visaType",
         "searchedHouses",
         "prefferedPlace",
         "prefferedSalary",
         "priceRange",
+        "houseType",
+        "prefferedCourse",
+        "lookingFor",
+        "typeOfJathakam",
+        "star",
+        "dateOfBirth",
+        "contactPersonName",
+        "createProfileFor",
+        "passportNo",
+        "aadharId",
       ];
 
       const recordObj = updatedRecord.toObject();
@@ -1853,6 +2200,43 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         },
         { $set: syncData }
       );
+    }
+
+    if (updateFields.reminderDateAndTime) {
+      try {
+        await ReminderNotification.findOneAndUpdate(
+          {
+            staffId,
+            profileId: record.profileId || record.slNo,
+          },
+          {
+            staffId,
+            profileId: record.profileId || record.slNo,
+            name: record.name,
+            phone: record.mobile,
+            remarks: record.remarkFirst || record.remarkSecond || "",
+            message: `Reminder: Follow-up with ${record.name || "Client"} (${
+              record.mobile
+            }) scheduled.`,
+            reminderDateAndTime: new Date(updateFields.reminderDateAndTime),
+            notified: false,
+            isRead: false,
+            isIgnoredStaff: false,
+          },
+          { upsert: true, new: true }
+        );
+
+        await Data.findByIdAndUpdate(record._id, {
+          $set: { hasReminder: true },
+        });
+
+        console.log(` Reminder created for ${record.name}`);
+      } catch (err) {
+        console.error(
+          `Failed to create reminder for record ${record._id}:`,
+          err
+        );
+      }
     }
 
     return res.status(200).json({

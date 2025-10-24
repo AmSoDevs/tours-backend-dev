@@ -8,6 +8,7 @@ const notificationSchema = new mongoose.Schema(
     message: { type: String },
     type: { type: String, default: "payment_update" },
     isRead: { type: Boolean, default: false },
+    isIgnoredAdmin: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
