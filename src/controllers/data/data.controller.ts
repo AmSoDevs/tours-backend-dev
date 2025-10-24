@@ -1343,10 +1343,10 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     };
 
     // 🔹 Filter to show only records with active reminders
+    // 🔹 Filter to show only records with reminders (past or future)
     if (showRemindersOnly === "true") {
-      const now = new Date();
       query.hasReminder = true;
-      query.reminderDateAndTime = { $gte: now };
+      query.reminderDateAndTime = { $ne: null };
     }
 
     // 🔹 Filters
@@ -1385,19 +1385,22 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
       ];
     }
 
-    // 🔹 Sort
     const sortObj: any = {};
-    const sortFieldMap: any = {
-      createdAt: "createdAt",
-      updatedAt: "updatedAt",
-      name: "name",
-      mobile: "mobile",
-      status: "status",
-      slNo: "slNo",
-      "assignedStaff.staffId": "assignedStaff.staffId",
-    };
-    const field = sortFieldMap[sortBy] || "createdAt";
-    sortObj[field] = sortOrder === "desc" ? -1 : 1;
+    if (showRemindersOnly === "true") {
+      sortObj.reminderDateAndTime = 1;
+    } else {
+      const sortFieldMap: any = {
+        createdAt: "createdAt",
+        updatedAt: "updatedAt",
+        name: "name",
+        mobile: "mobile",
+        status: "status",
+        slNo: "slNo",
+        "assignedStaff.staffId": "assignedStaff.staffId",
+      };
+      const field = sortFieldMap[sortBy] || "createdAt";
+      sortObj[field] = sortOrder === "desc" ? -1 : 1;
+    }
 
     const skip = (page - 1) * (limit || 0);
     // 🔹 If only showing reminders, sort by nearest reminder first
@@ -2030,7 +2033,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         type: "payment_update",
       });
 
-      console.log("✅ Notification Created:", {
+      console.log("Notification Created:", {
         id: newNotification._id,
         message: newNotification.message,
         createdAt: newNotification.createdAt,
@@ -2147,6 +2150,43 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         },
         { $set: syncData }
       );
+    }
+
+    if (updateFields.reminderDateAndTime) {
+      try {
+        await ReminderNotification.findOneAndUpdate(
+          {
+            staffId,
+            profileId: record.profileId || record.slNo,
+          },
+          {
+            staffId,
+            profileId: record.profileId || record.slNo,
+            name: record.name,
+            phone: record.mobile,
+            remarks: record.remarkFirst || record.remarkSecond || "",
+            message: `Reminder: Follow-up with ${record.name || "Client"} (${
+              record.mobile
+            }) scheduled.`,
+            reminderDateAndTime: new Date(updateFields.reminderDateAndTime),
+            notified: false,
+            isRead: false,
+            isIgnoredStaff: false,
+          },
+          { upsert: true, new: true }
+        );
+
+        await Data.findByIdAndUpdate(record._id, {
+          $set: { hasReminder: true },
+        });
+
+        console.log(` Reminder created for ${record.name}`);
+      } catch (err) {
+        console.error(
+          `Failed to create reminder for record ${record._id}:`,
+          err
+        );
+      }
     }
 
     return res.status(200).json({

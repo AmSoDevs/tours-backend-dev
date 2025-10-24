@@ -7,7 +7,6 @@ export const getNotifications = async (req: Request, res: Response) => {
     const { since } = req.query;
 
     const query: any = {
-      isRead: false,
       isIgnoredAdmin: false,
     };
 
@@ -67,11 +66,17 @@ export const markAdminNotificationAsRead = async (
 
 export const getStaffReminders = async (req: Request, res: Response) => {
   try {
-    const { staffId } = req.params;
+    const staffId = String(req.query.staffId || "");
+
+    if (!staffId) {
+      return res.status(400).json({
+        success: false,
+        message: "staffId is required in query params",
+      });
+    }
 
     const reminders = await ReminderNotification.find({
       staffId,
-      isRead: false,
       isIgnoredStaff: false,
     })
       .sort({ reminderDateAndTime: 1 })
@@ -94,7 +99,7 @@ export const getStaffReminders = async (req: Request, res: Response) => {
 
 export const markReminderAsRead = async (req: Request, res: Response) => {
   try {
-    const {staffId, reminderId } = req.params;
+    const { staffId, reminderId } = req.params;
 
     const reminder = await ReminderNotification.findOne({
       _id: reminderId,
