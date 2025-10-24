@@ -159,6 +159,7 @@ export const getData = async (req: Request, res: Response) => {
     const type = String(req.query.type || "all");
     const startDate = req.query.startDate ? String(req.query.startDate) : "";
     const endDate = req.query.endDate ? String(req.query.endDate) : "";
+    const approvalStatus = String(req.query.approvalStatus || "null");
 
     const query: any = {};
     query.isDeleted = showDeletedOnly === "true";
@@ -201,6 +202,30 @@ export const getData = async (req: Request, res: Response) => {
       if (isValidDate(endDate))
         dateFilter.$lte = new Date(new Date(endDate).setHours(23, 59, 59, 999));
       query.createdAt = dateFilter;
+    }
+
+    if (approvalStatus !== "null") {
+      const approvalFields = [
+        "isPaymentApproved.regPaymentApproved",
+        "isPaymentApproved.regReceivedApproved",
+        "isPaymentApproved.serPaymentApproved",
+        "isPaymentApproved.serReceivedApproved",
+      ];
+
+      if (approvalStatus === "rejected") {
+        query.$or = approvalFields.map((f) => ({ [f]: "rejected" }));
+      } else if (approvalStatus === "pending") {
+        query.$and = [
+          { $nor: approvalFields.map((f) => ({ [f]: "rejected" })) },
+          { $or: approvalFields.map((f) => ({ [f]: "pending" })) },
+        ];
+      } else if (approvalStatus === "approved") {
+        query.$and = [
+          { $nor: approvalFields.map((f) => ({ [f]: "rejected" })) },
+          { $nor: approvalFields.map((f) => ({ [f]: "pending" })) },
+          { $or: approvalFields.map((f) => ({ [f]: "approved" })) },
+        ];
+      }
     }
 
     // ✅ Sort handling
@@ -1335,6 +1360,7 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
     const type = String(req.query.type || "all");
     const profileId = String(req.query.profileId || "");
     const showRemindersOnly = String(req.query.showRemindersOnly || "false");
+    const approvalStatus = String(req.query.approvalStatus || "null");
 
     // 🔹 Base query: only data assigned to this staff
     const query: any = {
@@ -1383,6 +1409,30 @@ export const getStaffAssignedData = async (req: Request, res: Response) => {
         { refferenceNumber: searchRegex },
         { slNo: searchRegex },
       ];
+    }
+
+    if (approvalStatus !== "null") {
+      const approvalFields = [
+        "isPaymentApproved.regPaymentApproved",
+        "isPaymentApproved.regReceivedApproved",
+        "isPaymentApproved.serPaymentApproved",
+        "isPaymentApproved.serReceivedApproved",
+      ];
+
+      if (approvalStatus === "rejected") {
+        query.$or = approvalFields.map((f) => ({ [f]: "rejected" }));
+      } else if (approvalStatus === "pending") {
+        query.$and = [
+          { $nor: approvalFields.map((f) => ({ [f]: "rejected" })) },
+          { $or: approvalFields.map((f) => ({ [f]: "pending" })) },
+        ];
+      } else if (approvalStatus === "approved") {
+        query.$and = [
+          { $nor: approvalFields.map((f) => ({ [f]: "rejected" })) },
+          { $nor: approvalFields.map((f) => ({ [f]: "pending" })) },
+          { $or: approvalFields.map((f) => ({ [f]: "approved" })) },
+        ];
+      }
     }
 
     const sortObj: any = {};
