@@ -1630,7 +1630,6 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
     const { id: staffId } = req.params;
     const { ids, status, reminderDateAndTime } = req.body;
 
-    // 🧩 Validate input
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
         success: false,
@@ -1645,7 +1644,7 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    // 🧩 Verify ownership - ensure all records belong to this staff
+    // Verify ownership
     const records = await Data.find({
       _id: { $in: ids },
       assignedStaff: staffId,
@@ -1659,7 +1658,6 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       });
     }
 
-    // 🧩 Prepare update object
     const updateData: any = { status };
 
     if (reminderDateAndTime) {
@@ -1670,7 +1668,6 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       updateData.hasReminder = false;
     }
 
-    // 🧩 Perform the update
     const updateResult = await Data.updateMany(
       {
         _id: { $in: ids },
@@ -1680,14 +1677,7 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
       { $set: updateData }
     );
 
-    if (updateResult.modifiedCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No records found to update.",
-      });
-    }
-
-    // 🧩 Handle Reminder Scheduling (if reminderDateAndTime provided)
+    // ✅ ReminderNotification logic
     if (reminderDateAndTime) {
       for (const record of records) {
         try {
@@ -1702,29 +1692,29 @@ export const updateStaffDataStatus = async (req: Request, res: Response) => {
               name: record.name,
               phone: record.mobile,
               remarks: record.remarkFirst || record.remarkSecond || "",
-              message: `⏰ Reminder: Follow-up with ${
-                record.name || "Client"
-              } (${record.mobile}) scheduled.`,
+              message: `Reminder: Follow-up with ${record.name || "Client"} (${
+                record.mobile
+              }) scheduled.`,
               reminderDateAndTime: new Date(reminderDateAndTime),
               notified: false,
               isRead: false,
+              isIgnoredStaff: false,
+              category: record.data,
             },
             { upsert: true, new: true }
           );
+
+          await Data.findByIdAndUpdate(record._id, {
+            $set: { hasReminder: true },
+          });
+
+          console.log(`📅 Reminder created for ${record.name}`);
         } catch (err) {
-          console.error(
-            `❌ Failed to create reminder for record ${record._id}:`,
-            err
-          );
+          console.error(`❌ Failed to create reminder for ${record._id}:`, err);
         }
       }
-
-      console.log(
-        `✅ ${records.length} reminder(s) scheduled for staff ${staffId}`
-      );
     }
 
-    // ✅ Response
     return res.status(200).json({
       success: true,
       message: `Successfully updated ${updateResult.modifiedCount} record(s)${
@@ -2015,12 +2005,13 @@ export const updateStaffRow = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Verify record ownership
     const record = await Data.findOne({
       _id: id,
       assignedStaff: staffId,
       isDeleted: false,
     });
+
+    console.log(record, "record");
 
     if (!record) {
       return res.status(403).json({
@@ -2081,12 +2072,14 @@ export const updateStaffRow = async (req: Request, res: Response) => {
         name: record.name,
         message,
         type: "payment_update",
+        category: record.data,
       });
 
       console.log("Notification Created:", {
         id: newNotification._id,
         message: newNotification.message,
         createdAt: newNotification.createdAt,
+        category: newNotification.category,
       });
 
       const approvalUpdates: any = { ...record.isPaymentApproved };
@@ -2222,6 +2215,7 @@ export const updateStaffRow = async (req: Request, res: Response) => {
             notified: false,
             isRead: false,
             isIgnoredStaff: false,
+            category: record.data,
           },
           { upsert: true, new: true }
         );

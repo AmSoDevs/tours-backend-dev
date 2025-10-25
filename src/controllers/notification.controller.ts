@@ -8,6 +8,7 @@ export const getNotifications = async (req: Request, res: Response) => {
 
     const query: any = {
       isIgnoredAdmin: false,
+      isRead: false,
     };
 
     if (since) query.createdAt = { $gt: new Date(since as string) };
@@ -75,13 +76,12 @@ export const getStaffReminders = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Get current time (UTC-safe) and time window
     const now = new Date();
     const fiveMinutesAhead = new Date(now.getTime() + 5 * 60 * 1000);
 
-    // ✅ Fetch reminders due within next 5 mins or just passed within 1 min
     const reminders = await ReminderNotification.find({
       staffId,
+      isRead: false,
       isIgnoredStaff: false,
       reminderDateAndTime: {
         $lte: fiveMinutesAhead,
